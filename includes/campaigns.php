@@ -61,9 +61,11 @@ function fxm_create_campaign() {
                     }
                 }
 
-                $out .= '<p>' . sprintf( __( 'Campaign %s successfully!', 'wp-charity' ), ( $campaign_id ? __( 'updated', 'wp-charity' ) : __( 'submitted', 'wp-charity' ) ) ) . '</p>';
+                $out .= '<div class="fxm--notification fxm--notification-success">' . sprintf( __( 'Campaign %s successfully!', 'wp-charity' ), ( $campaign_id ? __( 'updated', 'wp-charity' ) : __( 'submitted', 'wp-charity' ) ) ) . '</div>';
+
+                return $out;
             } else {
-                $out .= '<p>' . sprintf( __( 'There was an error %s the campaign.', 'wp-charity' ), ( $campaign_id ? __( 'updating', 'wp-charity' ) : __( 'submitting', 'wp-charity' ) ) ) . '</p>';
+                $out .= '<div class="fxm--notification fxm--notification-error">' . sprintf( __( 'There was an error %s the campaign.', 'wp-charity' ), ( $campaign_id ? __( 'updating', 'wp-charity' ) : __( 'submitting', 'wp-charity' ) ) ) . '</div>';
             }
         }
 

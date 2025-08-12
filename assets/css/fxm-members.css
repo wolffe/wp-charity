@@ -147,6 +147,15 @@ html.no-js .whiskey-tab-content {
     background-color: #f1f2f6;
     border-radius: var(--fxm-border-radius);
     padding: 2em;
+    margin: 0 0 1em 0;
+}
+.fxm--box-compact {
+    padding: 1em 2em;
+}
+.fxm--box hr {
+    height: 1px;
+    border: 0 none;
+    border-top: 2px groove #ffffff;
 }
 .fxm--tiny-account h1 {
     font-size: 24px;
@@ -200,19 +209,6 @@ html.no-js .whiskey-tab-content {
     display: block;
 }
 
-details.parent-campaign-details {
-    margin-bottom: 2em;
-    padding: 20px;
-    background: #f9f9f9;
-    border-radius: var(--fxm-border-radius);
-}
-details.parent-campaign-details summary {
-    cursor: pointer;
-    list-style: none;
-}
-details.parent-campaign-details summary::marker {
-    display: none;
-}
 .parent-campaign-image {
     margin-bottom: 1em;
 }
@@ -227,6 +223,7 @@ details.parent-campaign-details summary::marker {
 }
 .parent-campaign-links {
     display: flex;
+    align-items: center;
     gap: 1em;
     margin-top: 1em;
 }
@@ -261,12 +258,20 @@ details.parent-campaign-details summary::marker {
     cursor: pointer;
     transition: all 0.3s ease;
 }
+.fxm--button.single_add_to_cart_button {
+    background: var(--fxm-cta-background, #2f3542);
+    color: var(--fxm-cta-text, #ecf0f1);
+}
 .fxm--button:hover,
 .campaign-product .button:hover {
     background: var(--fxm-accent-background, #2f3542);
     color: var(--fxm-accent-text, #ecf0f1);
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.fxm--button.single_add_to_cart_button:hover {
+    background: var(--fxm-cta-background, #2f3542);
+    color: var(--fxm-cta-text, #ecf0f1);
 }
 
 .fxm--button-secondary {
@@ -275,6 +280,14 @@ details.parent-campaign-details summary::marker {
         var(--fxm-accent-background),
         transparent 25%
     );
+}
+.fxm--button-tertiary {
+    background: #666666;
+}
+
+.fxm--button-small {
+    padding: 0.5em 1em;
+    font-size: 14px;
 }
 
 .progress-stats {
@@ -390,6 +403,9 @@ details.parent-campaign-details summary::marker {
     color: #ef6c00;
 }
 
+.fxm--campaign-list li {
+    margin: 0 0 1em 0;
+}
 .fxm--campaign-list a {
     text-decoration: none;
 }
@@ -521,6 +537,20 @@ details.parent-campaign-details summary::marker {
     display: block;
 }
 
+.fxm--notification {
+    padding: 1em;
+    border-radius: var(--fxm-border-radius);
+    margin-bottom: 1em;
+}
+.fxm--notification-success {
+    background-color: #d4edda;
+    color: #155724;
+}
+.fxm--notification-error {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
 @media (max-width: 45em) {
     .fxm--campaign-tabs .tab,
     .fxm--campaign-tabs label {
@@ -530,5 +560,155 @@ details.parent-campaign-details summary::marker {
         width: 100%;
         margin-right: 0;
         margin-top: 0.2rem;
+    }
+}
+
+/* Variation form styles */
+.campaign-donation .variations_form .variations {
+    margin-bottom: 1rem;
+}
+
+.campaign-donation .variations_form .variations-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.campaign-donation .variations_form .variation-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.campaign-donation .variations_form .variation-label {
+    font-weight: 600;
+}
+
+.campaign-donation .variations_form .variation-label label {
+    margin-bottom: 0;
+}
+
+.campaign-donation .variations_form .variation-value {
+    flex: 1;
+}
+
+.campaign-donation .variations_form .variations select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: var(--fxm-border-radius-small);
+    background-color: #fff;
+    font-size: 14px;
+}
+
+.campaign-donation .variations_form .variations select:focus {
+    border-color: var(--fxm-accent-background);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(47, 53, 66, 0.2);
+}
+
+.campaign-donation .single_variation_wrap {
+    margin-top: 1rem;
+}
+
+.campaign-donation .single_variation {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: var(--fxm-border-radius);
+    border: 1px solid #e9ecef;
+}
+
+.campaign-donation .single_variation .woocommerce-variation-price {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--fxm-accent-background);
+}
+
+.campaign-donation .single_variation .woocommerce-variation-description {
+    margin-top: 0.5rem;
+    font-size: 14px;
+    color: #666;
+}
+
+.campaign-donation .variations_button button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Custom price field styles */
+.campaign-donation .custom-price-field {
+    margin: 1rem 0;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: var(--fxm-border-radius);
+    border: 1px solid #e9ecef;
+}
+
+.campaign-donation .custom-price-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--fxm-accent-background);
+}
+
+.campaign-donation .custom-price-input-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    max-width: 200px;
+}
+
+.campaign-donation .custom-price-input {
+    width: 100%;
+    padding: 0.75rem 0.75rem 0.75rem 2rem;
+    border: 2px solid #ddd;
+    border-radius: var(--fxm-border-radius-small);
+    background-color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    transition: border-color 0.3s ease;
+}
+
+.campaign-donation .custom-price-input:focus {
+    border-color: var(--fxm-accent-background);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(47, 53, 66, 0.2);
+}
+
+.campaign-donation .custom-price-input:valid {
+    border-color: #28a745;
+}
+
+.campaign-donation .custom-price-note {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 14px;
+    color: #666;
+    font-style: italic;
+}
+
+.campaign-donation input[type="text"],
+.campaign-donation select {
+    font-family: inherit;
+    padding: 0.75rem;
+}
+
+@media (max-width: 45em) {
+    .campaign-donation .variations_form .variation-row {
+        gap: 0.25rem;
+    }
+
+    .campaign-donation .variations_form .variation-label {
+        margin-bottom: 0.25rem;
+    }
+
+    .campaign-donation .custom-price-input-wrapper {
+        max-width: 100%;
+    }
+
+    .campaign-donation .custom-price-field {
+        margin: 0.75rem 0;
+        padding: 0.75rem;
     }
 }

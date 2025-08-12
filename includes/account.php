@@ -40,10 +40,20 @@ function fxm_signup_form( $atts, $content = false ) {
             <label class="block" for="new-username">' . __( 'Username', 'wp-charity' ) . '</label>
             <input type="text" name="new_user_name" id="new-username" autocomplete="off">
         </p>
-        <p>
-            <label class="block" for="new-useremail">' . __( 'Email Address', 'wp-charity' ) . ' <span>*</span></label>
-            <input type="email" name="new_user_email" id="new-useremail" autocomplete="on">
-        </p>
+        <div class="wp-block-columns" style="gap:2em">
+            <div class="wp-block-column">
+                <p>
+                    <label class="block" for="new-useremail">' . __( 'Email Address', 'wp-charity' ) . ' <span>*</span></label>
+                    <input type="email" name="new_user_email" id="new-useremail" autocomplete="on">
+                </p>
+            </div>
+            <div class="wp-block-column">
+                <p>
+                    <label class="block" for="new-userphone">' . __( 'Phone Number', 'wp-charity' ) . '</label>
+                    <input type="text" name="new_user_phone" id="new-userphone" autocomplete="on">
+                </p>
+            </div>
+        </div>
         <div class="wp-block-columns" style="gap:2em">
             <div class="wp-block-column">
                 <p>
@@ -79,8 +89,11 @@ function fxm_signup_form( $atts, $content = false ) {
         $page_title         = ( $policy_page_id ) ? get_the_title( $policy_page_id ) : '';
 
         $out .= '<p>
-                <input type="checkbox" name="fxm_tc_agree" id="fxm_tc_agree" value="1">
-                <label for="fxm_tc_agree">' . sprintf( __( 'I agree to the <a href="%1$s" target="_blank">%2$s</a>', 'wp-charity' ), $privacy_policy_url, $page_title ) . ' <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="height:16px;vertical-align:text-bottom;"><path fill-rule="evenodd" d="M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7c0-1.1.9-2 2-2h5v2H5v12h12v-5h2Zm0-7.6-7.3 7.3-1.4-1.4L17.6 5H13V3h8v8h-2V6.4Z"></path></svg></label>
+            <input type="checkbox" name="fxm_tc_agree" id="fxm_tc_agree" value="1">
+            <label for="fxm_tc_agree">';
+        /* translators: 1: Privacy policy URL, 2: Privacy policy page title */
+        $out .= sprintf( __( 'I agree to the <a href="%1$s" target="_blank">%2$s</a>', 'wp-charity' ), esc_url( $privacy_policy_url ), esc_html( $page_title ) );
+        $out .= ' <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="height:16px;vertical-align:text-bottom;"><path fill-rule="evenodd" d="M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7c0-1.1.9-2 2-2h5v2H5v12h12v-5h2Zm0-7.6-7.3 7.3-1.4-1.4L17.6 5H13V3h8v8h-2V6.4Z"></path></svg></label>
             </p>';
     }
 
@@ -97,18 +110,84 @@ add_shortcode( 'fxm-signup', 'fxm_signup_form' );
 add_action( 'wp_ajax_fxm_register_user_front_end', 'fxm_register_user_front_end' );
 add_action( 'wp_ajax_nopriv_fxm_register_user_front_end', 'fxm_register_user_front_end' );
 
+/**
+ * Send a GET webhook to the configured GHL URL when a user registers.
+ * Includes name, email, and phone if available.
+ */
+function cm_send_ghl_webhook_on_register( $user_id ) {
+    $webhook_url = trim( (string) get_option( 'fxm_webhook_ghl' ) );
+    if ( empty( $webhook_url ) ) {
+        return;
+    }
+
+    $user = get_userdata( $user_id );
+    if ( ! $user ) {
+        return;
+    }
+
+    $first = trim( (string) get_user_meta( $user_id, 'first_name', true ) );
+    $last  = trim( (string) get_user_meta( $user_id, 'last_name', true ) );
+    $name  = trim( $first . ' ' . $last );
+    if ( '' === $name ) {
+        $dn = (string) $user->display_name;
+        if ( '' === $dn ) {
+            $dn = (string) $user->user_login;
+        }
+        $name = $dn;
+    }
+
+    // Try common phone meta keys; fall back to request payload if present.
+    $phone = (string) get_user_meta( $user_id, 'billing_phone', true );
+    if ( '' === $phone ) {
+        $phone = (string) get_user_meta( $user_id, 'phone', true );
+    }
+    if ( '' === $phone ) {
+        if ( isset( $_POST['phone'] ) ) {
+            $phone = sanitize_text_field( wp_unslash( $_POST['phone'] ) );
+        } elseif ( isset( $_POST['new_phone'] ) ) {
+            $phone = sanitize_text_field( wp_unslash( $_POST['new_phone'] ) );
+        }
+    }
+
+    $args      = [
+        'name'  => $name,
+        'email' => (string) $user->user_email,
+        'phone' => $phone,
+    ];
+    $hook_call = add_query_arg( $args, $webhook_url );
+
+    // Fire-and-forget; don't block registration on webhook issues.
+    $response = wp_remote_get( $hook_call, [ 'timeout' => 5 ] );
+    if ( is_wp_error( $response ) ) {
+        // Optional: uncomment for debugging
+        // error_log( 'GHL webhook failed for user ' . $user_id . ': ' . $response->get_error_message() );
+    }
+}
+
+// Also capture registrations from other flows (e.g., wp-admin or other forms)
+add_action( 'user_register', 'cm_send_ghl_webhook_on_register', 20, 1 );
+
 function fxm_register_user_front_end() {
     $new_user_email    = stripcslashes( $_POST['new_user_email'] );
+    $new_user_phone    = isset( $_POST['new_user_phone'] ) ? sanitize_text_field( $_POST['new_user_phone'] ) : '';
     $new_user_password = $_POST['new_user_password'];
     $user_nice_name    = strtolower( $_POST['new_user_email'] );
     $loginurl          = get_permalink( (int) get_option( 'fxm_members_account_page_id' ) );
+
+    // Derive display name from provided first/last names if available
+    $new_firstname = isset( $_POST['new_firstname'] ) ? sanitize_text_field( $_POST['new_firstname'] ) : '';
+    $new_lastname  = isset( $_POST['new_lastname'] ) ? sanitize_text_field( $_POST['new_lastname'] ) : '';
+    $display_name  = trim( $new_firstname . ' ' . $new_lastname );
+    if ( '' === $display_name ) {
+        $display_name = $new_user_email;
+    }
 
     $user_data = [
         'user_login'    => $new_user_email,
         'user_email'    => $new_user_email,
         'user_pass'     => $new_user_password,
         'user_nicename' => $user_nice_name,
-        'display_name'  => $new_user_first_name,
+        'display_name'  => $display_name,
         'role'          => 'volunteer',
     ];
 
@@ -121,6 +200,9 @@ function fxm_register_user_front_end() {
 
         if ( isset( $_POST['new_lastname'] ) ) {
             update_user_meta( $user_id, 'last_name', sanitize_text_field( $_POST['new_lastname'] ) );
+        }
+        if ( ! empty( $new_user_phone ) ) {
+            update_user_meta( $user_id, 'billing_phone', $new_user_phone );
         }
 
         // Trigger new user email notification (to user)
@@ -295,6 +377,7 @@ function wppd_tiny_ajax_password_reset() {
 
     $message  = '<p>' . __( 'Someone has requested a password reset for the following account:', 'wp-charity' ) . '</p>';
     $message .= '<p>' . network_home_url( '/' ) . '</p>';
+    // translators: %s: Username of the account requesting a password reset
     $message .= '<p>' . sprintf( __( 'Username: %s', 'wp-charity' ), $user_login ) . '</p>';
     $message .= '<p>' . __( 'If this was a mistake, just ignore this email and nothing will happen.', 'wp-charity' ) . '</p>';
     $message .= '<p>' . __( 'To reset your password, visit the following address:', 'wp-charity' ) . '</p>';
@@ -308,6 +391,7 @@ function wppd_tiny_ajax_password_reset() {
         $blogname = wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
     }
 
+    // translators: %s: Site name used in the email subject
     $title = sprintf( __( '[%s] Password Reset', 'wp-charity' ), $blogname );
 
     $headers   = [];

@@ -32,8 +32,14 @@ function fxm_build_admin_page() {
 
                 update_option( 'fxm_accent_background', sanitize_text_field( wp_unslash( $_POST['fxm_accent_background'] ?? '' ) ) );
                 update_option( 'fxm_accent_text', sanitize_text_field( wp_unslash( $_POST['fxm_accent_text'] ?? '' ) ) );
+                update_option( 'fxm_cta_background', sanitize_text_field( wp_unslash( $_POST['fxm_cta_background'] ?? '' ) ) );
+                update_option( 'fxm_cta_text', sanitize_text_field( wp_unslash( $_POST['fxm_cta_text'] ?? '' ) ) );
+
                 update_option( 'fxm_notifications_emails', sanitize_text_field( wp_unslash( $_POST['fxm_notifications_emails'] ?? '' ) ) );
                 update_option( 'fxm_volunteer_campaign_status', sanitize_text_field( wp_unslash( $_POST['fxm_volunteer_campaign_status'] ?? 'draft' ) ) );
+
+                update_option( 'fxm_webhook_ghl', sanitize_url( $_POST['fxm_webhook_ghl'] ) );
+
                 echo '<div class="updated notice is-dismissible"><p>' . __( 'Settings updated successfully!', 'wp-charity' ) . '</p></div>';
             }
             ?>
@@ -67,17 +73,32 @@ function fxm_build_admin_page() {
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row"><label><?php _e( 'Colours', 'wp-charity' ); ?></label></th>
+                            <th scope="row"><label><?php _e( 'UI Colours', 'wp-charity' ); ?></label></th>
                             <td>
                                 <p>
-                                    <label for="fxm_accent_background"><?php _e( 'Background Accent Color:', 'wp-charity' ); ?></label><br>
-                                    <input type="color" id="fxm_accent_background" name="fxm_accent_background" value="<?php echo esc_attr( get_option( 'fxm_accent_background' ) ); ?>">
+                                    <label for="fxm_accent_background"><?php _e( 'Accent Background Color:', 'wp-charity' ); ?></label>
                                     <br><small><?php _e( 'This colour is used for buttons, tabs and links background.', 'wp-charity' ); ?></small>
+                                    <br><input type="color" id="fxm_accent_background" name="fxm_accent_background" value="<?php echo esc_attr( get_option( 'fxm_accent_background' ) ); ?>">
                                 </p>
                                 <p>
-                                    <label for="fxm_accent_text"><?php _e( 'Text Accent Color:', 'wp-charity' ); ?></label><br>
-                                    <input type="color" id="fxm_accent_text" name="fxm_accent_text" value="<?php echo esc_attr( get_option( 'fxm_accent_text' ) ); ?>">
+                                    <label for="fxm_accent_text"><?php _e( 'Accent Text Color:', 'wp-charity' ); ?></label>
                                     <br><small><?php _e( 'This colour is used for buttons, tabs and links text.', 'wp-charity' ); ?></small>
+                                    <br><input type="color" id="fxm_accent_text" name="fxm_accent_text" value="<?php echo esc_attr( get_option( 'fxm_accent_text' ) ); ?>">
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label><?php _e( 'CTA Colours', 'wp-charity' ); ?></label></th>
+                            <td>
+                                <p>
+                                    <label for="fxm_cta_background"><?php _e( 'CTA Background Color:', 'wp-charity' ); ?></label>
+                                    <br><small><?php _e( 'This colour is used for the main Donate button.', 'wp-charity' ); ?></small>
+                                    <br><input type="color" id="fxm_cta_background" name="fxm_cta_background" value="<?php echo esc_attr( get_option( 'fxm_cta_background' ) ); ?>">
+                                </p>
+                                <p>
+                                    <label for="fxm_cta_text"><?php _e( 'CTA Text Color:', 'wp-charity' ); ?></label>
+                                    <br><small><?php _e( 'This colour is used for the main Donate button.', 'wp-charity' ); ?></small>
+                                    <br><input type="color" id="fxm_cta_text" name="fxm_cta_text" value="<?php echo esc_attr( get_option( 'fxm_cta_text' ) ); ?>">
                                 </p>
                             </td>
                         </tr>
@@ -97,6 +118,15 @@ function fxm_build_admin_page() {
                                 <p>
                                     <input type="text" name="fxm_notifications_emails" value="<?php echo get_option( 'fxm_notifications_emails' ); ?>" class="regular-text">
                                     <br><small><?php _e( 'Enter email addresses to receive notifications when new campaigns are created. Default is the admin email. Separate multiple emails with commas.', 'wp-charity' ); ?></small>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="fxm_webhook_ghl">GHL Webhook URL</label></th>
+                            <td>
+                                <p>
+                                    <input type="url" name="fxm_webhook_ghl" value="<?php echo get_option( 'fxm_webhook_ghl' ); ?>" class="regular-text" placeholder="https://">
+                                    <br><small>Enter the webhook URL for GHL integration.</small>
                                 </p>
                             </td>
                         </tr>

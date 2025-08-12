@@ -64,7 +64,7 @@ function cm_campaign_buttons_shortcode( $atts ) {
             <input type="hidden" name="campaign_id" value="' . esc_attr( $campaign_id ) . '">
             <p style="display: flex; gap: 1em; justify-content: ' . esc_attr( $justify_content ) . ';">
                 <button type="submit" class="fxm--button"><i class="ai-heart"></i> ' . __( 'Donate', 'wp-charity' ) . '</button>
-                <button type="button" onclick="share()" class="fxm--button"><i class="ai-network"></i> ' . __( 'Share', 'wp-charity' ) . '</button>' .
+                <button type="button" onclick="share(event)" class="fxm--button"><i class="ai-network"></i> ' . __( 'Share', 'wp-charity' ) . '</button>' .
                 $volunteer_button .
             '</p>
         </form>

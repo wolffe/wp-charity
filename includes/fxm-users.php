@@ -50,11 +50,15 @@ function fxm_account_page() {
         foreach ( $campaigns as $campaign ) {
             $campaign_status = $campaign->post_status === 'publish' ? __( 'Published', 'wp-charity' ) : __( 'Draft', 'wp-charity' );
 
-            $out .= '<li>';
-            $out .= esc_html( $campaign->post_title ) . ' (' . $campaign_status . ') ';
-            $out .= '<br><small><a href="?edit_campaign=' . $campaign->ID . '#new-campaign"><i class="ai-pencil"></i> ' . __( 'Edit', 'wp-charity' ) . '</a>';
-            $out .= ' | <a href="' . get_permalink( $campaign->ID ) . '"><i class="ai-link-chain"></i> ' . __( 'Share', 'wp-charity' ) . '</a></small>';
-            $out .= '</li>';
+            $out .= '<li>' .
+                esc_html( $campaign->post_title ) . ' (' . $campaign_status . ') ' .
+                '<br>
+                <small>
+                    <a href="?edit_campaign=' . $campaign->ID . '#new-campaign"><i class="ai-pencil"></i> ' . __( 'Edit', 'wp-charity' ) . '</a>
+                     | <a href="' . get_permalink( $campaign->ID ) . '"><i class="ai-link-chain"></i> ' . __( 'View Campaign', 'wp-charity' ) . '</a>
+                     | <a href="#" onclick="share(event, \'' . get_permalink( $campaign->ID ) . '\')"><i class="ai-network"></i> ' . __( 'Share Campaign', 'wp-charity' ) . '</a>
+                </small>
+            </li>';
         }
         $out .= '</ul>';
     } else {

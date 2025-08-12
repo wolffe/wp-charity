@@ -1,10 +1,12 @@
-function share() {
+function share(e, url = window.location.href) {
+    e.preventDefault(); // stops link navigation
+
     if ("navigator" in window && window.navigator.share) {
         window.navigator
             .share({
                 title: document.title,
                 text: document.title,
-                url: window.location.href,
+                url: url,
             })
             .then(() => console.log("Page was successfully shared"))
             .catch((error) => console.log(error));
@@ -93,13 +95,41 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Function to update donation goal based on parent campaign
+    // Helpers to sanitize inherited content from Gutenberg/block editor
+    function stripGutenbergComments(html) {
+        // Remove Gutenberg block comments like <!-- wp:paragraph --> and <!-- /wp:paragraph -->
+        return typeof html === 'string' ? html.replace(/<!--[\s\S]*?-->/g, '') : html;
+    }
+
+    function replaceNbsp(str) {
+        return typeof str === 'string' ? str.replace(/&nbsp;/g, ' ') : str;
+    }
+
+    function decodeEntitiesToText(str) {
+        if (typeof str !== 'string') return str;
+        const txt = document.createElement('textarea');
+        txt.innerHTML = str;
+        return txt.value;
+    }
+
+    function htmlToPlainText(html) {
+        if (typeof html !== 'string') return html;
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        return (div.textContent || div.innerText || '').trim();
+    }
+
+    // Function to update donation goal and inherit fields based on parent campaign
     function updateDonationGoal() {
         const parentSelect = document.getElementById("parent_campaign");
         const goalInput = document.getElementById("donation_goal");
         const startDateInput = document.getElementById("start_date");
         const endDateInput = document.getElementById("end_date");
         const nonceInput = document.getElementById("get_parent_goal_nonce");
+        // Additional fields to auto-populate
+        const titleInput = document.getElementById("campaign_title");
+        const summaryTextarea = document.getElementById("short_description");
+        const descriptionTextarea = document.getElementById("long_description");
         const parentId = parentSelect.value;
 
         if (parentId) {
@@ -143,6 +173,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             endDateInput.readOnly = false;
                             endDateInput.title = "";
                         }
+
+                        // Update title, summary, description from parent campaign (leave editable)
+                        if (titleInput && data.data.title) {
+                            titleInput.value = data.data.title;
+                        }
+                        if (summaryTextarea && data.data.excerpt) {
+                            summaryTextarea.value = data.data.excerpt;
+                        }
+                        if (descriptionTextarea && data.data.content) {
+                            // Convert to plain text: strip Gutenberg comments, normalize spaces, remove all HTML
+                            const cleaned = replaceNbsp(stripGutenbergComments(data.data.content));
+                            descriptionTextarea.value = htmlToPlainText(cleaned);
+                        }
                     }
                 })
                 .catch(error => console.error("Error:", error));
@@ -154,6 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
             startDateInput.title = "";
             endDateInput.readOnly = false;
             endDateInput.title = "";
+
+            // Leave title/summary/description untouched when clearing parent selection
         }
     }
 
@@ -241,4 +286,177 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll(`.whiskey-tabs li a[href="${hash}"]`)[0].click();
         }
     }
+
+    // Handle variation forms
+    const variationForms = document.querySelectorAll('.campaign-donation .variations_form');
+
+    variationForms.forEach(form => {
+        const selects = form.querySelectorAll('.variations select');
+        const submitButton = form.querySelector('.single_add_to_cart_button');
+        const variationContainer = form.querySelector('.single_variation');
+        const variationIdInput = form.querySelector('.variation_id');
+
+        if (selects.length === 0) return;
+
+        // Function to check if all variations are selected
+        function checkVariationsSelected() {
+            let allSelected = true;
+            selects.forEach(select => {
+                if (!select.value) {
+                    allSelected = false;
+                }
+            });
+
+            if (submitButton) {
+                submitButton.disabled = !allSelected;
+            }
+
+            return allSelected;
+        }
+
+        // Function to find matching variation
+        function findMatchingVariation() {
+            const attributes = {};
+            let hasCustom = false;
+
+            selects.forEach(select => {
+                const attributeName = select.getAttribute('data-attribute_name');
+                const value = select.value;
+                attributes[attributeName] = value;
+
+                // Check if any selection is "Custom"
+                if (value.toLowerCase() === 'custom') {
+                    hasCustom = true;
+                }
+            });
+
+            // Get product variations from the form data attribute
+            const variations = form.getAttribute('data-product_variations');
+            const nypActive = form.getAttribute('data-nyp_active') === '1';
+
+            if (!variations) return null;
+
+            try {
+                const variationsData = JSON.parse(variations);
+
+                // Find matching variation
+                for (let i = 0; i < variationsData.length; i++) {
+                    const variation = variationsData[i];
+                    let match = true;
+
+                    for (const attr in attributes) {
+                        if (variation.attributes[attr] !== attributes[attr] && variation.attributes[attr] !== '') {
+                            match = false;
+                            break;
+                        }
+                    }
+
+                    if (match) {
+                        return {
+                            ...variation,
+                            has_custom: hasCustom,
+                            nyp_active: nypActive
+                        };
+                    }
+                }
+            } catch (e) {
+                console.log('Error parsing variations data:', e);
+            }
+
+            return {
+                variation_id: 0,
+                display_price: '',
+                display_regular_price: '',
+                variation_description: '',
+                has_custom: hasCustom,
+                nyp_active: nypActive
+            };
+        }
+
+        // Function to update variation display
+        function updateVariationDisplay() {
+            if (!checkVariationsSelected()) {
+                if (variationContainer) {
+                    variationContainer.innerHTML = '';
+                    variationContainer.style.display = 'none';
+                }
+                if (variationIdInput) {
+                    variationIdInput.value = '0';
+                }
+                return;
+            }
+
+            const variation = findMatchingVariation();
+            if (variation && variationContainer) {
+                let html = '';
+
+                if (variation.display_price && !variation.has_custom) {
+                    html += `<div class="woocommerce-variation-price">Donation Amount: ${variation.display_price}</div>`;
+                }
+
+                if (variation.variation_description) {
+                    html += `<div class="woocommerce-variation-description">${variation.variation_description}</div>`;
+                }
+
+                // Show custom price input if "Custom" is selected
+                if (variation.has_custom) {
+                    html += `
+                        <div class="custom-price-field">
+                            <label for="custom_price_${form.getAttribute('data-product_id')}">Enter your donation amount:</label>
+                            <div class="custom-price-input-wrapper">
+                                <input 
+                                    type="number" 
+                                    id="custom_price_${form.getAttribute('data-product_id')}" 
+                                    name="nyp" 
+                                    class="custom-price-input" 
+                                    placeholder="0.00" 
+                                    min="0.01" 
+                                    step="0.01"
+                                    required
+                                />
+                            </div>
+                            <small class="custom-price-note">Please enter the amount you would like to donate.</small>
+                        </div>
+                    `;
+                }
+
+                variationContainer.innerHTML = html;
+                variationContainer.style.display = 'block';
+
+                if (variationIdInput) {
+                    variationIdInput.value = variation.variation_id || '0';
+                }
+
+                // Add event listener to custom price input if it exists
+                if (variation.has_custom) {
+                    const customPriceInput = variationContainer.querySelector('.custom-price-input');
+                    if (customPriceInput) {
+                        customPriceInput.addEventListener('input', function () {
+                            // Enable/disable submit button based on custom price input
+                            const hasValue = this.value && parseFloat(this.value) > 0;
+                            if (submitButton) {
+                                submitButton.disabled = !hasValue;
+                            }
+                        });
+
+                        // Initial check for submit button state
+                        const hasValue = customPriceInput.value && parseFloat(customPriceInput.value) > 0;
+                        if (submitButton) {
+                            submitButton.disabled = !hasValue;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add event listeners to all select elements
+        selects.forEach(select => {
+            select.addEventListener('change', () => {
+                updateVariationDisplay();
+            });
+        });
+
+        // Initial check
+        checkVariationsSelected();
+    });
 });
