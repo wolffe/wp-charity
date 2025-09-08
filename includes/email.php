@@ -1,7 +1,7 @@
 <?php
 /**
  * Email functionality for WP Charity
- * 
+ *
  * @package WP_Charity
  * @since 1.0.5
  */
@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Get campaign details (name and permalink) for a given order ID
- * 
+ *
  * @param int $order_id The WooCommerce order ID
  * @return array|false Array with 'name' and 'permalink' keys, or false if no campaign found
  */
@@ -30,7 +30,7 @@ function cm_get_campaign_details_by_order_id( $order_id ) {
                 return [
                     'name'      => $campaign->post_title,
                     'permalink' => get_permalink( $campaign_id ),
-                    'id'        => $campaign_id
+                    'id'        => $campaign_id,
                 ];
             }
         }
@@ -41,7 +41,7 @@ function cm_get_campaign_details_by_order_id( $order_id ) {
 
 /**
  * Add campaign information to the new order email
- * 
+ *
  * @param WC_Order $order The order object
  * @param bool $sent_to_admin Whether the email is being sent to admin
  * @param bool $plain_text Whether the email is plain text
@@ -54,7 +54,7 @@ function cm_add_campaign_info_to_new_order_email( $order, $sent_to_admin, $plain
     }
 
     $campaign_details = cm_get_campaign_details_by_order_id( $order->get_id() );
-    
+
     if ( ! $campaign_details ) {
         return;
     }
@@ -62,8 +62,8 @@ function cm_add_campaign_info_to_new_order_email( $order, $sent_to_admin, $plain
     if ( $plain_text ) {
         echo "\n\n";
         echo "Campaign Information:\n";
-        echo "Campaign: " . $campaign_details['name'] . "\n";
-        echo "Campaign URL: " . $campaign_details['permalink'] . "\n";
+        echo 'Campaign: ' . $campaign_details['name'] . "\n";
+        echo 'Campaign URL: ' . $campaign_details['permalink'] . "\n";
     } else {
         echo '<div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #0073aa;">';
         echo '<h3 style="margin: 0 0 10px 0; color: #0073aa;">Campaign Information</h3>';
@@ -84,7 +84,7 @@ function cm_add_campaign_info_to_new_order_email_template( $order, $sent_to_admi
     }
 
     $campaign_details = cm_get_campaign_details_by_order_id( $order->get_id() );
-    
+
     if ( ! $campaign_details ) {
         return;
     }
@@ -92,8 +92,8 @@ function cm_add_campaign_info_to_new_order_email_template( $order, $sent_to_admi
     if ( $plain_text ) {
         echo "\n\n";
         echo "Campaign Information:\n";
-        echo "Campaign: " . $campaign_details['name'] . "\n";
-        echo "Campaign URL: " . $campaign_details['permalink'] . "\n";
+        echo 'Campaign: ' . $campaign_details['name'] . "\n";
+        echo 'Campaign URL: ' . $campaign_details['permalink'] . "\n";
     } else {
         echo '<div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #0073aa;">';
         echo '<h3 style="margin: 0 0 10px 0; color: #0073aa;">Campaign Information</h3>';
@@ -113,7 +113,7 @@ function cm_add_campaign_info_to_customer_new_order_email( $order, $sent_to_admi
     }
 
     $campaign_details = cm_get_campaign_details_by_order_id( $order->get_id() );
-    
+
     if ( ! $campaign_details ) {
         return;
     }
@@ -121,8 +121,8 @@ function cm_add_campaign_info_to_customer_new_order_email( $order, $sent_to_admi
     if ( $plain_text ) {
         echo "\n\n";
         echo "Campaign Information:\n";
-        echo "Campaign: " . $campaign_details['name'] . "\n";
-        echo "Campaign URL: " . $campaign_details['permalink'] . "\n";
+        echo 'Campaign: ' . $campaign_details['name'] . "\n";
+        echo 'Campaign URL: ' . $campaign_details['permalink'] . "\n";
     } else {
         echo '<div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #0073aa;">';
         echo '<h3 style="margin: 0 0 10px 0; color: #0073aa;">Campaign Information</h3>';
