@@ -50,6 +50,7 @@ require_once 'includes/meta.php';
 require_once 'includes/settings.php';
 require_once 'includes/account.php';
 require_once 'includes/shortcodes.php';
+require_once 'includes/email.php';
 
 /**
  * Declare HPOS compatibility (WooCommerce High-Performance Order Storage).
@@ -775,3 +776,5 @@ function cm_modify_campaign_meta_value( $display_value, $meta, $item ) {
     return $display_value;
 }
 add_filter( 'woocommerce_order_item_display_meta_value', 'cm_modify_campaign_meta_value', 10, 3 );
+
+
