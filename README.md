@@ -23,11 +23,6 @@
 
 🛡️ Privacy Compliant | 🔐 GDPR & CCPA Compliant | 📟 PCI Compliant | ✅ getButterfly Verified | 💎ᴠɪᴘ Lifetime Updates
 
-### Documentation
-
-- [Documentation](https://getbutterfly.com/support/documentation/wp-charity-for-woocommerce-documentation/)
-- [User Guide](https://getbutterfly.com/support/documentation/wp-charity-for-woocommerce-user-guide/)
-
 ---
 
 ## Why Choose WP Charity?
