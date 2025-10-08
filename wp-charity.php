@@ -3,13 +3,12 @@
  * Plugin Name: WP Charity for WooCommerce
  * Plugin URI: https://getbutterfly.com/wordpress-plugins/wp-charity-wordpress-donation-plugin-fundraising/
  * Description: The WordPress fundraising alternative for non-profits, created to help non-profits raise money on their own website.
- * Version: 1.0.6
+ * Version: 1.0.7
  * Author: Ciprian Popescu
  * Author URI: https://getbutterfly.com/
- * Update URI: http://getbutterfly.com/
  * Requires at least: 6.0
  * Requires Plugins: woocommerce
- * Tested up to: 6.8.2
+ * Tested up to: 6.8.3
  * License: GPLv3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: wp-charity
@@ -42,9 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'CM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'CM_PLUGIN_VERSION', '1.0.6' );
-
-require CM_PLUGIN_DIR . '/includes/updater.php';
+define( 'CM_PLUGIN_VERSION', '1.0.7' );
 
 require_once 'includes/meta.php';
 require_once 'includes/settings.php';
