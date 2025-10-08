@@ -2,6 +2,15 @@
 
 *Raise more money for your cause with the most powerful WordPress donation and fundraising plugin. Trusted by over 10,000+ organizations.*
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [README.md](README.md) | Main plugin overview and features |
+| [HOW-TO.md](HOW-TO.md) | Complete setup and configuration guide |
+| [USER-GUIDE.md](USER-GUIDE.md) | User guide for donors and volunteers |
+| [USER_DOCUMENTATION.md](USER_DOCUMENTATION.md) | Additional user documentation |
+
 ## Key Features
 
 | Feature | Description |
