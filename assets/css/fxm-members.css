@@ -712,3 +712,11 @@ html.no-js .whiskey-tab-content {
         padding: 0.75rem;
     }
 }
+
+/* Mobile responsive grid container */
+@media (max-width: 768px) {
+    .fxm--grid-container {
+        grid-template-columns: 1fr !important;
+        --columns: 1 !important;
+    }
+}

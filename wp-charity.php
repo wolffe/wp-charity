@@ -3,7 +3,7 @@
  * Plugin Name: WP Charity for WooCommerce
  * Plugin URI: https://getbutterfly.com/wordpress-plugins/wp-charity-wordpress-donation-plugin-fundraising/
  * Description: The WordPress fundraising alternative for non-profits, created to help non-profits raise money on their own website.
- * Version: 1.0.7
+ * Version: 1.0.8
  * Author: Ciprian Popescu
  * Author URI: https://getbutterfly.com/
  * Requires at least: 6.0
@@ -41,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'CM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'CM_PLUGIN_VERSION', '1.0.7' );
+define( 'CM_PLUGIN_VERSION', '1.0.8' );
 
 require_once 'includes/meta.php';
 require_once 'includes/settings.php';
@@ -159,6 +159,9 @@ function cm_display_product_on_child_campaign( $content ) {
         $campaign_dates .= '<div style="text-align:center"><small>Donations available until ' . esc_html( date_i18n( get_option( 'date_format' ), strtotime( $end_date ) ) ) . '</small></div>';
     }
 
+    // QR code
+    $qr_code = cm_generate_qr_code( get_permalink() );
+
     if ( ! $parent_id ) {
         // This is a campaign without a parent campaign, show simplified content
 
@@ -170,6 +173,9 @@ function cm_display_product_on_child_campaign( $content ) {
         $content .= '<div class="campaign-content">';
 
         $content .= $campaign_content;
+
+        // Add QR code
+        $content .= $qr_code;
 
         // Add donation button
         if ( $product_id ) {
@@ -232,6 +238,7 @@ function cm_display_product_on_child_campaign( $content ) {
 
                 cm_display_campaign_author( $post ) .
                 $campaign_content .
+                $qr_code .
 
             '</div>
             <div style="display:block">
@@ -773,3 +780,20 @@ function cm_modify_campaign_meta_value( $display_value, $meta, $item ) {
     return $display_value;
 }
 add_filter( 'woocommerce_order_item_display_meta_value', 'cm_modify_campaign_meta_value', 10, 3 );
+
+/**
+ * Generate QR code for a given URL using QR Server API
+ */
+function cm_generate_qr_code( $url ) {
+    if ( empty( $url ) ) {
+        return '';
+    }
+    
+    $encoded_url = urlencode( $url );
+    $qr_code_url = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" . $encoded_url;
+    
+    return '<div class="campaign-qr-code" style="text-align: center; margin: 20px 0;">
+        <img src="' . esc_url( $qr_code_url ) . '" alt="QR Code for this page" style="max-width: 200px; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;">
+        <p style="margin-top: 10px; font-size: 14px; color: #666;">Scan to share this campaign</p>
+    </div>';
+}
