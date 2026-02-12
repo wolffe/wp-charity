@@ -13,10 +13,16 @@ function fxm_handle_csv_export() {
         return;
     }
 
-    // Handle CSV export
+    // Handle campaign orders CSV export
     if ( isset( $_GET['export_campaign_orders'] ) && isset( $_GET['campaign_id'] ) && wp_verify_nonce( $_GET['_wpnonce'], 'export_campaign_orders_' . (int) $_GET['campaign_id'] ) ) {
         $campaign_id = (int) $_GET['campaign_id'];
         cm_export_campaign_orders_csv( $campaign_id );
+        exit;
+    }
+
+    // Handle donations report CSV export
+    if ( isset( $_GET['export_donations_report'] ) && wp_verify_nonce( $_GET['_wpnonce'], 'export_donations_report' ) ) {
+        cm_export_donations_report_csv();
         exit;
     }
 }
@@ -32,6 +38,7 @@ function fxm_build_admin_page() {
 
         <h2 class="nav-tab-wrapper">
             <a href="<?php echo esc_attr( $section ); ?>dashboard" class="nav-tab <?php echo $tab === 'dashboard' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Dashboard', 'wp-charity' ); ?></a>
+            <a href="<?php echo esc_attr( $section ); ?>reports" class="nav-tab <?php echo $tab === 'reports' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Reports', 'wp-charity' ); ?></a>
             <a href="<?php echo esc_attr( $section ); ?>help" class="nav-tab <?php echo $tab === 'help' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Help', 'wp-charity' ); ?></a>
         </h2>
 
@@ -154,6 +161,50 @@ function fxm_build_admin_page() {
                     </tbody>
                 </table>
             </form>
+        <?php } elseif ( $tab === 'reports' ) {
+            $donations_report = cm_get_donations_report_data();
+            $export_report_url = wp_nonce_url( add_query_arg( [ 'export_donations_report' => '1' ], admin_url( 'edit.php?post_type=campaign&page=fxm&tab=reports' ) ), 'export_donations_report' );
+            ?>
+            <h2><?php _e( 'Reports', 'wp-charity' ); ?></h2>
+            <h3><?php _e( 'Donations report', 'wp-charity' ); ?></h3>
+            <p><?php _e( 'Match donations to customers and campaigns: who gave, how much, to which campaign, and who created that campaign. Use the CSV export for finance.', 'wp-charity' ); ?></p>
+            <p><a href="<?php echo esc_url( $export_report_url ); ?>" class="button button-primary"><span class="dashicons dashicons-download" style="vertical-align:middle;"></span> <?php _e( 'Export full report as CSV', 'wp-charity' ); ?></a></p>
+            <div class="campaign-report">
+                <table class="widefat fixed" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th><?php _e( 'Order #', 'wp-charity' ); ?></th>
+                            <th><?php _e( 'Customer name', 'wp-charity' ); ?></th>
+                            <th><?php _e( 'Email', 'wp-charity' ); ?></th>
+                            <th><?php _e( 'Customer number', 'wp-charity' ); ?></th>
+                            <th><?php _e( 'Amount', 'wp-charity' ); ?></th>
+                            <th><?php _e( 'Date', 'wp-charity' ); ?></th>
+                            <th><?php _e( 'Campaign', 'wp-charity' ); ?></th>
+                            <th><?php _e( 'Campaign created by', 'wp-charity' ); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        if ( ! empty( $donations_report ) ) {
+                            foreach ( $donations_report as $row ) {
+                                echo '<tr>';
+                                echo '<td>' . esc_html( $row['order_number'] ) . '</td>';
+                                echo '<td>' . esc_html( $row['customer_name'] ) . '</td>';
+                                echo '<td>' . esc_html( $row['email'] ) . '</td>';
+                                echo '<td>' . esc_html( $row['customer_number'] ) . '</td>';
+                                echo '<td>' . wc_price( $row['amount'] ) . '</td>';
+                                echo '<td>' . esc_html( $row['date'] ) . '</td>';
+                                echo '<td>' . esc_html( $row['campaign_name'] ) . ' <small>(ID: ' . (int) $row['campaign_id'] . ')</small></td>';
+                                echo '<td>' . esc_html( $row['campaign_creator_name'] ) . '</td>';
+                                echo '</tr>';
+                            }
+                        } else {
+                            echo '<tr><td colspan="8">' . esc_html__( 'No donation data found.', 'wp-charity' ) . '</td></tr>';
+                        }
+                        ?>
+                    </tbody>
+                </table>
+            </div>
         <?php } elseif ( $tab === 'help' ) { ?>
             <h2><span class="dashicons dashicons-editor-help"></span> <?php _e( 'Help', 'wp-charity' ); ?></h2>
 
@@ -407,6 +458,123 @@ function cm_export_campaign_orders_csv( $campaign_id ) {
                 $order_data['campaign_id'],
                 $order_data['campaign_name'],
                 $order_data['campaign_url'],
+            ]
+        );
+    }
+
+    fclose( $output );
+    exit;
+}
+
+/**
+ * Get donations report data: donor, amount, campaign, campaign creator.
+ *
+ * @return array List of rows with order_number, customer_name, email, customer_number, amount, date, campaign_id, campaign_name, campaign_creator_name.
+ */
+function cm_get_donations_report_data() {
+    $orders = wc_get_orders(
+        [
+            'limit'  => -1,
+            'status' => [ 'completed', 'processing', 'on-hold' ],
+            'type'   => 'shop_order',
+        ]
+    );
+
+    $rows = [];
+    foreach ( $orders as $order ) {
+        $customer_name = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+        $email = $order->get_billing_email();
+        $customer_id = $order->get_customer_id();
+        $customer_number = $customer_id ? (string) $customer_id : '—';
+        $order_number = $order->get_order_number();
+        $date = $order->get_date_created() ? $order->get_date_created()->date_i18n( 'Y-m-d H:i:s' ) : '';
+
+        foreach ( $order->get_items() as $item ) {
+            $campaign_id = (int) $item->get_meta( '_campaign_id' );
+            if ( ! $campaign_id ) {
+                continue;
+            }
+
+            $campaign = get_post( $campaign_id );
+            $campaign_name = $campaign && $campaign->post_type === 'campaign' ? $campaign->post_title : __( '(Unknown campaign)', 'wp-charity' );
+            $creator_id = $campaign ? (int) $campaign->post_author : 0;
+            $creator = $creator_id ? get_userdata( $creator_id ) : null;
+            $campaign_creator_name = $creator ? $creator->display_name : ( $creator_id ? (string) $creator_id : '—' );
+
+            // Line total for this donation (one row per donation line)
+            $amount = $item->get_total();
+            if ( is_string( $amount ) ) {
+                $amount = (float) $amount;
+            }
+
+            $rows[] = [
+                'order_id'              => $order->get_id(),
+                'order_number'           => $order_number,
+                'customer_name'          => $customer_name,
+                'email'                  => $email,
+                'customer_number'        => $customer_number,
+                'amount'                 => $amount,
+                'date'                   => $date,
+                'campaign_id'            => $campaign_id,
+                'campaign_name'          => $campaign_name,
+                'campaign_creator_name'  => $campaign_creator_name,
+            ];
+        }
+    }
+
+    // Sort by date descending
+    usort(
+        $rows,
+        function ( $a, $b ) {
+            return strcmp( $b['date'], $a['date'] );
+        }
+    );
+
+    return $rows;
+}
+
+/**
+ * Export donations report as CSV for finance.
+ */
+function cm_export_donations_report_csv() {
+    $rows = cm_get_donations_report_data();
+
+    $filename = 'donations-report-' . gmdate( 'Y-m-d' ) . '.csv';
+    header( 'Content-Type: text/csv; charset=utf-8' );
+    header( 'Content-Disposition: attachment; filename=' . $filename );
+    header( 'Pragma: no-cache' );
+    header( 'Expires: 0' );
+    echo "\xEF\xBB\xBF";
+
+    $output = fopen( 'php://output', 'w' );
+    fputcsv(
+        $output,
+        [
+            __( 'Order #', 'wp-charity' ),
+            __( 'Customer name', 'wp-charity' ),
+            __( 'Email', 'wp-charity' ),
+            __( 'Customer number', 'wp-charity' ),
+            __( 'Amount', 'wp-charity' ),
+            __( 'Date', 'wp-charity' ),
+            __( 'Campaign ID', 'wp-charity' ),
+            __( 'Campaign name', 'wp-charity' ),
+            __( 'Campaign created by', 'wp-charity' ),
+        ]
+    );
+
+    foreach ( $rows as $row ) {
+        fputcsv(
+            $output,
+            [
+                $row['order_number'],
+                $row['customer_name'],
+                $row['email'],
+                $row['customer_number'],
+                $row['amount'],
+                $row['date'],
+                $row['campaign_id'],
+                $row['campaign_name'],
+                $row['campaign_creator_name'],
             ]
         );
     }

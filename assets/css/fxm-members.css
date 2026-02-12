@@ -538,9 +538,12 @@ html.no-js .whiskey-tab-content {
 }
 
 .fxm--notification {
-    padding: 1em;
+    padding: 1em 1.25em;
     border-radius: var(--fxm-border-radius);
     margin-bottom: 1em;
+    font-size: 1.125rem;
+    font-weight: 500;
+    line-height: 1.5;
 }
 .fxm--notification-success {
     background-color: #d4edda;

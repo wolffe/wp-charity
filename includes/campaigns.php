@@ -61,7 +61,12 @@ function fxm_create_campaign() {
                     }
                 }
 
-                $out .= '<div class="fxm--notification fxm--notification-success">' . sprintf( __( 'Campaign %s successfully!', 'wp-charity' ), ( $campaign_id ? __( 'updated', 'wp-charity' ) : __( 'submitted', 'wp-charity' ) ) ) . '</div>';
+                $saved_campaign = get_post( $campaign_id );
+                if ( $saved_campaign && $saved_campaign->post_status === 'draft' ) {
+                    $out .= '<div class="fxm--notification fxm--notification-success">' . __( 'Your campaign has been submitted and is pending approval. We\'ll notify you once it\'s reviewed.', 'wp-charity' ) . '</div>';
+                } else {
+                    $out .= '<div class="fxm--notification fxm--notification-success">' . sprintf( __( 'Campaign %s successfully!', 'wp-charity' ), ( $campaign_id ? __( 'updated', 'wp-charity' ) : __( 'submitted', 'wp-charity' ) ) ) . '</div>';
+                }
 
                 return $out;
             } else {
