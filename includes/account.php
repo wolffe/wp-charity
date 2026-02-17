@@ -167,6 +167,65 @@ function cm_send_ghl_webhook_on_register( $user_id ) {
 // Also capture registrations from other flows (e.g., wp-admin or other forms)
 add_action( 'user_register', 'cm_send_ghl_webhook_on_register', 20, 1 );
 
+/**
+ * Send a POST webhook to the configured GHL approval URL when a campaign is approved (draft → publish).
+ * Payload: name, email, phone, volunteer-portal-page-url (JSON).
+ */
+function cm_send_approval_webhook_ghl( $new_status, $old_status, $post ) {
+    if ( $post->post_type !== 'campaign' || $new_status !== 'publish' || $old_status !== 'draft' ) {
+        return;
+    }
+
+    $webhook_url = trim( (string) get_option( 'fxm_approval_webhook_ghl' ) );
+    if ( empty( $webhook_url ) ) {
+        return;
+    }
+
+    $user_id = (int) $post->post_author;
+    $user    = get_userdata( $user_id );
+    if ( ! $user || ! is_email( $user->user_email ) ) {
+        return;
+    }
+
+    $first = trim( (string) get_user_meta( $user_id, 'first_name', true ) );
+    $last  = trim( (string) get_user_meta( $user_id, 'last_name', true ) );
+    $name  = trim( $first . ' ' . $last );
+    if ( '' === $name ) {
+        $dn = (string) $user->display_name;
+        if ( '' === $dn ) {
+            $dn = (string) $user->user_login;
+        }
+        $name = $dn;
+    }
+
+    $phone = (string) get_user_meta( $user_id, 'billing_phone', true );
+    if ( '' === $phone ) {
+        $phone = (string) get_user_meta( $user_id, 'phone', true );
+    }
+
+    $campaign_url = get_permalink( $post->ID );
+    if ( ! $campaign_url ) {
+        return;
+    }
+
+    $payload = [
+        'name'                       => $name,
+        'email'                      => (string) $user->user_email,
+        'phone'                      => $phone,
+        'volunteer-portal-page-url'  => $campaign_url,
+    ];
+
+    wp_remote_post(
+        $webhook_url,
+        [
+            'timeout' => 10,
+            'headers' => [ 'Content-Type' => 'application/json' ],
+            'body'    => wp_json_encode( $payload ),
+        ]
+    );
+}
+add_action( 'transition_post_status', 'cm_send_approval_webhook_ghl', 10, 3 );
+
 function fxm_register_user_front_end() {
     $new_user_email    = stripcslashes( $_POST['new_user_email'] );
     $new_user_phone    = isset( $_POST['new_user_phone'] ) ? sanitize_text_field( $_POST['new_user_phone'] ) : '';
