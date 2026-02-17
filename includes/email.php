@@ -132,3 +132,87 @@ function cm_add_campaign_info_to_customer_new_order_email( $order, $sent_to_admi
 }
 add_action( 'woocommerce_email_order_details', 'cm_add_campaign_info_to_customer_new_order_email', 10, 4 );
 add_action( 'woocommerce_email_order_meta', 'cm_add_campaign_info_to_customer_new_order_email', 10, 4 );
+
+/**
+ * Send email to campaign author when their campaign is submitted for review (moderation enabled).
+ * Only runs when volunteer campaigns require admin approval.
+ */
+function cm_email_author_campaign_submitted_for_review( $post_id, $post, $update ) {
+    if ( $update || $post->post_type !== 'campaign' || $post->post_status !== 'draft' ) {
+        return;
+    }
+    if ( get_option( 'fxm_volunteer_campaign_status', 'draft' ) !== 'draft' ) {
+        return;
+    }
+
+    $author = get_userdata( $post->post_author );
+    if ( ! $author || ! is_email( $author->user_email ) ) {
+        return;
+    }
+
+    $subject = sprintf(
+        /* translators: %s: campaign title */
+        __( 'Campaign submitted: %s', 'wp-charity' ),
+        $post->post_title
+    );
+
+    $message = sprintf(
+        __(
+            "Hi %s,\n\n" .
+            "Thank you for submitting your campaign \"%s\".\n\n" .
+            "Our team will review it shortly. We'll notify you by email once it has been reviewed and, if approved, your campaign will go live.\n\n" .
+            "You don't need to do anything in the meantime.\n\n" .
+            "Thanks,\n" .
+            "The Team",
+            'wp-charity'
+        ),
+        $author->display_name,
+        $post->post_title
+    );
+
+    wp_mail( $author->user_email, $subject, $message );
+}
+add_action( 'wp_insert_post', 'cm_email_author_campaign_submitted_for_review', 10, 3 );
+
+/**
+ * Send email to campaign author when their campaign is approved and published.
+ */
+function cm_email_author_campaign_approved( $new_status, $old_status, $post ) {
+    if ( $post->post_type !== 'campaign' || $new_status !== 'publish' || $old_status !== 'draft' ) {
+        return;
+    }
+
+    $author = get_userdata( $post->post_author );
+    if ( ! $author || ! is_email( $author->user_email ) ) {
+        return;
+    }
+
+    $campaign_url = get_permalink( $post->ID );
+    if ( ! $campaign_url ) {
+        return;
+    }
+
+    $subject = sprintf(
+        /* translators: %s: campaign title */
+        __( 'Your campaign is live: %s', 'wp-charity' ),
+        $post->post_title
+    );
+
+    $message = sprintf(
+        __(
+            "Hi %s,\n\n" .
+            "Great news — your campaign \"%s\" has been approved and is now live!\n\n" .
+            "View your campaign: %s\n\n" .
+            "You can share this link with friends and supporters to start raising funds.\n\n" .
+            "Thanks,\n" .
+            "The Team",
+            'wp-charity'
+        ),
+        $author->display_name,
+        $post->post_title,
+        $campaign_url
+    );
+
+    wp_mail( $author->user_email, $subject, $message );
+}
+add_action( 'transition_post_status', 'cm_email_author_campaign_approved', 10, 3 );

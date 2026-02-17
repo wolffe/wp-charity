@@ -63,6 +63,7 @@ function fxm_build_admin_page() {
                 update_option( 'fxm_volunteer_campaign_status', sanitize_text_field( wp_unslash( $_POST['fxm_volunteer_campaign_status'] ?? 'draft' ) ) );
 
                 update_option( 'fxm_webhook_ghl', sanitize_url( $_POST['fxm_webhook_ghl'] ) );
+                update_option( 'fxm_approval_webhook_ghl', sanitize_url( $_POST['fxm_approval_webhook_ghl'] ?? '' ) );
 
                 echo '<div class="updated notice is-dismissible"><p>' . __( 'Settings updated successfully!', 'wp-charity' ) . '</p></div>';
             }
@@ -151,6 +152,15 @@ function fxm_build_admin_page() {
                                 <p>
                                     <input type="url" name="fxm_webhook_ghl" value="<?php echo get_option( 'fxm_webhook_ghl' ); ?>" class="regular-text" placeholder="https://">
                                     <br><small>Enter the webhook URL for GHL integration.</small>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="fxm_approval_webhook_ghl">GHL Campaign Approval Webhook URL</label></th>
+                            <td>
+                                <p>
+                                    <input type="url" name="fxm_approval_webhook_ghl" id="fxm_approval_webhook_ghl" value="<?php echo esc_url( get_option( 'fxm_approval_webhook_ghl', '' ) ); ?>" class="regular-text" placeholder="https://">
+                                    <br><small><?php _e( 'Optional. Called when a campaign is approved (draft → published). Payload: name, email, phone, volunteer-portal-page-url.', 'wp-charity' ); ?></small>
                                 </p>
                             </td>
                         </tr>
