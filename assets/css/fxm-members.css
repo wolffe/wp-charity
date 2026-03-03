@@ -149,6 +149,9 @@ html.no-js .whiskey-tab-content {
     padding: 2em;
     margin: 0 0 1em 0;
 }
+.fxm--box.fxm--donation-box {
+    padding: 1em;
+}
 .fxm--box-compact {
     padding: 1em 2em;
 }

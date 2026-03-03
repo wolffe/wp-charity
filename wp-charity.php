@@ -3,12 +3,12 @@
  * Plugin Name: WP Charity for WooCommerce
  * Plugin URI: https://getbutterfly.com/wordpress-plugins/wp-charity-wordpress-donation-plugin-fundraising/
  * Description: The WordPress fundraising alternative for non-profits, created to help non-profits raise money on their own website.
- * Version: 1.0.8
+ * Version: 1.0.9
  * Author: Ciprian Popescu
  * Author URI: https://getbutterfly.com/
  * Requires at least: 6.0
  * Requires Plugins: woocommerce
- * Tested up to: 6.8.3
+ * Tested up to: 6.9.1
  * License: GPLv3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: wp-charity
@@ -16,7 +16,7 @@
  * WC requires at least: 7.0.0
  * WC tested up to: 10.1.2
  *
- * WP Charity for WooCommerce (c) 2024-2025 Ciprian Popescu (https://getbutterfly.com/)
+ * WP Charity for WooCommerce (c) 2024-2026 Ciprian Popescu (https://getbutterfly.com/)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'CM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'CM_PLUGIN_VERSION', '1.0.8' );
+define( 'CM_PLUGIN_VERSION', '1.0.9' );
 
 require_once 'includes/meta.php';
 require_once 'includes/settings.php';
@@ -566,6 +566,54 @@ function cm_get_campaign_stats( $campaign_id ) {
 }
 
 /**
+ * Get total amount donated to a campaign (sum of line item totals).
+ * For parent campaigns that allow volunteer campaigns, includes totals of all child campaigns.
+ *
+ * @param int $campaign_id Campaign post ID.
+ * @return float Total donated.
+ */
+function cm_get_campaign_total_donated( $campaign_id ) {
+    $campaign_id = (int) $campaign_id;
+    $ids         = [ $campaign_id ];
+    if ( cm_campaign_allows_volunteers( $campaign_id ) ) {
+        $children = get_posts(
+            [
+                'post_type'   => 'campaign',
+                'post_parent' => $campaign_id,
+                'post_status' => [ 'publish', 'draft' ],
+                'numberposts' => -1,
+                'fields'      => 'ids',
+            ]
+        );
+        $ids = array_merge( $ids, array_map( 'intval', $children ) );
+    }
+    $ids = array_filter( array_unique( $ids ) );
+    if ( empty( $ids ) ) {
+        return 0.0;
+    }
+    if ( ! function_exists( 'wc_get_orders' ) ) {
+        return 0.0;
+    }
+    $orders = wc_get_orders(
+        [
+            'limit'  => -1,
+            'status' => [ 'completed', 'processing', 'on-hold' ],
+            'type'   => 'shop_order',
+        ]
+    );
+    $total = 0.0;
+    foreach ( $orders as $order ) {
+        foreach ( $order->get_items() as $item ) {
+            $item_campaign_id = (int) $item->get_meta( '_campaign_id' );
+            if ( in_array( $item_campaign_id, $ids, true ) ) {
+                $total += (float) $item->get_total();
+            }
+        }
+    }
+    return $total;
+}
+
+/**
  * Invalidate campaign stats cache for all campaign IDs attached to an order
  */
 function cm_invalidate_campaign_stats_for_order( $order_id ) {
@@ -780,6 +828,153 @@ function cm_modify_campaign_meta_value( $display_value, $meta, $item ) {
     return $display_value;
 }
 add_filter( 'woocommerce_order_item_display_meta_value', 'cm_modify_campaign_meta_value', 10, 3 );
+
+/**
+ * Handle reassigning a donation line item to a different campaign (order edit screen).
+ */
+function cm_maybe_reassign_donation_campaign() {
+    if ( ! isset( $_POST['cm_reassign_donation_nonce'] ) || ! isset( $_POST['cm_reassign_order_id'] ) || ! isset( $_POST['cm_reassign_item_id'] ) || ! isset( $_POST['cm_reassign_campaign_id'] ) ) {
+        return;
+    }
+    if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['cm_reassign_donation_nonce'] ) ), 'cm_reassign_donation_campaign' ) ) {
+        return;
+    }
+    if ( ! current_user_can( 'edit_shop_orders' ) ) {
+        return;
+    }
+    $order_id    = (int) $_POST['cm_reassign_order_id'];
+    $item_id     = (int) $_POST['cm_reassign_item_id'];
+    $campaign_id = (int) $_POST['cm_reassign_campaign_id'];
+    $edit_url = get_edit_post_link( $order_id, 'raw' );
+    if ( ! $edit_url && function_exists( 'admin_url' ) ) {
+        $edit_url = admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order_id );
+    }
+    if ( ! $order_id || ! $item_id || ! $campaign_id ) {
+        wp_safe_redirect( add_query_arg( 'cm_reassign', 'error', $edit_url ) );
+        exit;
+    }
+    $order = wc_get_order( $order_id );
+    if ( ! $order ) {
+        wp_safe_redirect( add_query_arg( 'cm_reassign', 'error', $edit_url ) );
+        exit;
+    }
+    $item = $order->get_item( $item_id );
+    if ( ! $item ) {
+        wp_safe_redirect( add_query_arg( 'cm_reassign', 'error', $edit_url ) );
+        exit;
+    }
+    $old_campaign_id = (int) $item->get_meta( '_campaign_id' );
+    $campaign        = get_post( $campaign_id );
+    if ( ! $campaign || $campaign->post_type !== 'campaign' ) {
+        wp_safe_redirect( add_query_arg( 'cm_reassign', 'invalid', $edit_url ) );
+        exit;
+    }
+    $item->update_meta_data( '_campaign_id', $campaign_id );
+    $item->save();
+    if ( $old_campaign_id > 0 ) {
+        delete_transient( 'cm_campaign_stats_' . $old_campaign_id );
+    }
+    delete_transient( 'cm_campaign_stats_' . $campaign_id );
+    wp_safe_redirect( add_query_arg( 'cm_reassign', 'success', $edit_url ) );
+    exit;
+}
+add_action( 'admin_init', 'cm_maybe_reassign_donation_campaign', 5 );
+
+/**
+ * Meta box: Reassign donation to another campaign (order edit screen).
+ * Supports both classic orders (shop_order) and HPOS order screen.
+ */
+function cm_add_reassign_donation_meta_box() {
+    $screen = 'shop_order';
+    if ( class_exists( '\Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController' ) && wc_get_container()->get( \Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController::class )->custom_orders_table_usage_is_enabled() ) {
+        $screen = wc_get_page_screen_id( 'shop-order' );
+    }
+    add_meta_box(
+        'cm_reassign_donation_campaign',
+        __( 'Donation campaign', 'wp-charity' ),
+        'cm_reassign_donation_meta_box',
+        $screen,
+        'side'
+    );
+}
+add_action( 'add_meta_boxes', 'cm_add_reassign_donation_meta_box' );
+
+/**
+ * Meta box content: list donation line items and dropdown to reassign campaign.
+ *
+ * @param WP_Post|WC_Order $post_or_order The order post (classic) or order object (HPOS).
+ */
+function cm_reassign_donation_meta_box( $post_or_order ) {
+    $order = $post_or_order instanceof WC_Order ? $post_or_order : wc_get_order( $post_or_order->ID ?? 0 );
+    if ( ! $order ) {
+        echo '<p>' . esc_html__( 'Order not found.', 'wp-charity' ) . '</p>';
+        return;
+    }
+
+    if ( isset( $_GET['cm_reassign'] ) ) {
+        if ( $_GET['cm_reassign'] === 'success' ) {
+            echo '<p class="notice notice-success" style="margin: 0 0 1em 0;">' . esc_html__( 'Donation campaign updated.', 'wp-charity' ) . '</p>';
+        } elseif ( $_GET['cm_reassign'] === 'error' || $_GET['cm_reassign'] === 'invalid' ) {
+            echo '<p class="notice notice-error" style="margin: 0 0 1em 0;">' . esc_html__( 'Could not update donation campaign. Please try again.', 'wp-charity' ) . '</p>';
+        }
+    }
+
+    $line_items = [];
+    foreach ( $order->get_items() as $item_id => $item ) {
+        $line_items[ $item_id ] = [
+            'name'        => $item->get_name(),
+            'total'       => $item->get_total(),
+            'campaign_id' => (int) $item->get_meta( '_campaign_id' ),
+        ];
+    }
+
+    if ( empty( $line_items ) ) {
+        echo '<p>' . esc_html__( 'No line items in this order. Add products to the order first, then assign a line to a campaign below.', 'wp-charity' ) . '</p>';
+        return;
+    }
+
+    $campaigns = get_posts(
+        [
+            'post_type'   => 'campaign',
+            'post_status' => [ 'publish', 'draft' ],
+            'numberposts' => -1,
+            'orderby'     => 'title',
+            'order'       => 'ASC',
+        ]
+    );
+
+    echo '<p style="margin: 0 0 0.75em 0;"><small>' . esc_html__( 'To count a line as a donation: choose a campaign and click the button. If the donor bought the wrong product, add the correct donation product as a line item, then assign it here.', 'wp-charity' ) . '</small></p>';
+
+    foreach ( $line_items as $item_id => $data ) {
+        $has_campaign = $data['campaign_id'] > 0;
+        $current_name = '';
+        if ( $has_campaign ) {
+            $current = get_post( $data['campaign_id'] );
+            $current_name = $current && $current->post_type === 'campaign' ? $current->post_title : __( '(Unknown)', 'wp-charity' );
+        }
+        echo '<div style="margin-bottom: 1em; padding-bottom: 1em; border-bottom: 1px solid #ddd;">';
+        echo '<p style="margin: 0 0 4px 0;"><strong>' . esc_html( $data['name'] ) . '</strong> ' . wp_kses_post( wc_price( $data['total'] ) ) . '</p>';
+        if ( $has_campaign ) {
+            echo '<p style="margin: 0 0 6px 0;"><small>' . esc_html__( 'Current campaign:', 'wp-charity' ) . ' ' . esc_html( $current_name ) . '</small></p>';
+        } else {
+            echo '<p style="margin: 0 0 6px 0;"><small>' . esc_html__( 'Not assigned to a campaign.', 'wp-charity' ) . '</small></p>';
+        }
+        echo '<form method="post" style="margin: 0;">';
+        wp_nonce_field( 'cm_reassign_donation_campaign', 'cm_reassign_donation_nonce' );
+        echo '<input type="hidden" name="cm_reassign_order_id" value="' . esc_attr( (string) $order->get_id() ) . '">';
+        echo '<input type="hidden" name="cm_reassign_item_id" value="' . esc_attr( (string) $item_id ) . '">';
+        echo '<select name="cm_reassign_campaign_id" style="width: 100%; margin-bottom: 6px;" required>';
+        echo '<option value="">' . esc_html__( '— Select campaign —', 'wp-charity' ) . '</option>';
+        foreach ( $campaigns as $c ) {
+            $selected = (int) $c->ID === (int) $data['campaign_id'] ? ' selected' : '';
+            echo '<option value="' . esc_attr( (string) $c->ID ) . '"' . $selected . '>' . esc_html( $c->post_title ) . ' (' . (int) $c->ID . ')</option>';
+        }
+        echo '</select>';
+        echo '<button type="submit" class="button button-primary" style="width: 100%;">' . ( $has_campaign ? esc_html__( 'Reassign to selected campaign', 'wp-charity' ) : esc_html__( 'Assign to selected campaign', 'wp-charity' ) ) . '</button>';
+        echo '</form>';
+        echo '</div>';
+    }
+}
 
 /**
  * Generate QR code for a given URL using QR Server API

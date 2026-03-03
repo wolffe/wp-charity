@@ -261,14 +261,53 @@ function cm_campaign_allows_volunteers( $campaign_id ) {
     return get_post_meta( $campaign_id, '_allow_volunteer_campaigns', true ) === '1';
 }
 
-// Send notification to admin when a new campaign is created
-function cm_notify_admin_new_campaign( $post_id, $post, $update ) {
-    // Only proceed if this is a new campaign post (not an update)
-    if ( $update || $post->post_type !== 'campaign' || $post->post_status !== 'draft' ) {
+/**
+ * Add "Total donated" column to the Campaigns list table in admin.
+ */
+function cm_campaign_columns( $columns ) {
+    $new = [];
+    foreach ( $columns as $key => $label ) {
+        $new[ $key ] = $label;
+        if ( $key === 'title' ) {
+            $new['total_donated'] = __( 'Total donated', 'wp-charity' );
+        }
+    }
+    if ( ! isset( $new['total_donated'] ) ) {
+        $new['total_donated'] = __( 'Total donated', 'wp-charity' );
+    }
+    return $new;
+}
+add_filter( 'manage_edit-campaign_columns', 'cm_campaign_columns' );
+
+/**
+ * Output "Total donated" value for each campaign in the list table.
+ */
+function cm_campaign_column_total_donated( $column_name, $post_id ) {
+    if ( $column_name !== 'total_donated' ) {
         return;
     }
+    if ( ! function_exists( 'cm_get_campaign_total_donated' ) || ! function_exists( 'wc_price' ) ) {
+        echo '—';
+        return;
+    }
+    $total = cm_get_campaign_total_donated( $post_id );
+    echo wp_kses_post( wc_price( $total ) );
+}
+add_action( 'manage_campaign_posts_custom_column', 'cm_campaign_column_total_donated', 10, 2 );
 
-    // Get notification emails from settings
+/**
+ * Send the "campaign pending review" email to admin(s).
+ * Used when a new draft campaign is created and when the author clicks "Remind admin to review".
+ *
+ * @param int $post_id Campaign post ID.
+ * @return bool True if at least one email was sent.
+ */
+function cm_send_admin_campaign_pending_email( $post_id ) {
+    $post = get_post( $post_id );
+    if ( ! $post || $post->post_type !== 'campaign' || $post->post_status !== 'draft' ) {
+        return false;
+    }
+
     $options             = get_option( 'cm_settings' );
     $notification_emails = isset( $options['notification_emails'] ) ?
         array_map( 'trim', explode( ',', $options['notification_emails'] ) ) :
@@ -297,12 +336,23 @@ function cm_notify_admin_new_campaign( $post_id, $post, $update ) {
         admin_url( 'post.php?post=' . $post_id . '&action=edit' )
     );
 
-    // Send email to each recipient
+    $sent = false;
     foreach ( $notification_emails as $email ) {
         if ( ! empty( $email ) && is_email( $email ) ) {
-            wp_mail( $email, $subject, $message );
+            if ( wp_mail( $email, $subject, $message ) ) {
+                $sent = true;
+            }
         }
     }
+    return $sent;
+}
+
+// Send notification to admin when a new campaign is created
+function cm_notify_admin_new_campaign( $post_id, $post, $update ) {
+    if ( $update || $post->post_type !== 'campaign' || $post->post_status !== 'draft' ) {
+        return;
+    }
+    cm_send_admin_campaign_pending_email( $post_id );
 }
 add_action( 'wp_insert_post', 'cm_notify_admin_new_campaign', 10, 3 );
 

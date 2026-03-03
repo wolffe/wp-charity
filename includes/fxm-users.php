@@ -24,11 +24,15 @@ function fxm_account_page() {
     );
 
     $out = '<div class="fxm--tiny-account">
-        <h1>' . __( 'My Account', 'wp-charity' ) . '</h1>
-
+        <h1>' . __( 'My Account', 'wp-charity' ) . '</h1>';
+    if ( isset( $_GET['cm_remind_sent'] ) && $_GET['cm_remind_sent'] === '1' ) {
+        $out .= '<div class="fxm--notification fxm--notification-success" role="alert">' . esc_html__( 'A reminder has been sent to the administrator to review your campaign.', 'wp-charity' ) . '</div>';
+    }
+    $out .= '
         <ul class="whiskey-tabs">
             <li><a href="#dashboard" class="is-active"><i class="ai-dashboard"></i> ' . __( 'Dashboard', 'wp-charity' ) . '</a></li>
             <li><a href="#my-campaigns"><i class="ai-two-line-horizontal"></i> ' . __( 'My Campaigns', 'wp-charity' ) . '</a></li>
+            <li><a href="#donations"><i class="ai-coin"></i> ' . __( 'Donations', 'wp-charity' ) . '</a></li>
             <li><a href="#new-campaign"><i class="ai-circle-plus"></i> ' . __( 'New Campaign', 'wp-charity' ) . '</a></li>
             <li><a href="#profile"><i class="ai-person"></i> ' . __( 'Profile', 'wp-charity' ) . '</a></li>
         </ul>
@@ -50,14 +54,19 @@ function fxm_account_page() {
         foreach ( $campaigns as $campaign ) {
             $campaign_status = $campaign->post_status === 'publish' ? __( 'Published', 'wp-charity' ) : __( 'Draft', 'wp-charity' );
 
+            $links = '<a href="?edit_campaign=' . $campaign->ID . '#new-campaign"><i class="ai-pencil"></i> ' . __( 'Edit', 'wp-charity' ) . '</a>
+                     | <a href="' . get_permalink( $campaign->ID ) . '"><i class="ai-link-chain"></i> ' . __( 'View Campaign', 'wp-charity' ) . '</a>
+                     | <a href="#" onclick="share(event, \'' . get_permalink( $campaign->ID ) . '\')"><i class="ai-network"></i> ' . __( 'Share Campaign', 'wp-charity' ) . '</a>';
+            if ( $campaign->post_status === 'draft' ) {
+                $remind_url = add_query_arg( 'cm_remind_campaign', $campaign->ID, get_permalink( (int) get_option( 'fxm_members_account_page_id' ) ) );
+                $remind_url = wp_nonce_url( $remind_url, 'cm_remind_campaign_' . $campaign->ID );
+                $links     .= ' | <a href="' . esc_url( $remind_url ) . '"><i class="ai-bell"></i> ' . __( 'Remind admin to review', 'wp-charity' ) . '</a>';
+            }
+
             $out .= '<li>' .
                 esc_html( $campaign->post_title ) . ' (' . $campaign_status . ') ' .
                 '<br>
-                <small>
-                    <a href="?edit_campaign=' . $campaign->ID . '#new-campaign"><i class="ai-pencil"></i> ' . __( 'Edit', 'wp-charity' ) . '</a>
-                     | <a href="' . get_permalink( $campaign->ID ) . '"><i class="ai-link-chain"></i> ' . __( 'View Campaign', 'wp-charity' ) . '</a>
-                     | <a href="#" onclick="share(event, \'' . get_permalink( $campaign->ID ) . '\')"><i class="ai-network"></i> ' . __( 'Share Campaign', 'wp-charity' ) . '</a>
-                </small>
+                <small>' . $links . '</small>
             </li>';
         }
         $out .= '</ul>';
@@ -65,6 +74,66 @@ function fxm_account_page() {
         $out .= '<p>' . __( 'You have not created any campaigns yet.', 'wp-charity' ) . '</p>';
     }
             //
+
+        $out .= '</section>
+        <section class="whiskey-tab-content" id="donations">';
+
+    /**
+     * Donations to the user's campaigns: donor name, email, amount.
+     */
+    $my_campaign_ids = $campaigns ? wp_list_pluck( $campaigns, 'ID' ) : [];
+    $donations_rows  = [];
+    if ( ! empty( $my_campaign_ids ) && function_exists( 'wc_get_orders' ) ) {
+        $orders = wc_get_orders(
+            [
+                'limit'  => -1,
+                'status' => [ 'completed', 'processing', 'on-hold' ],
+                'type'   => 'shop_order',
+            ]
+        );
+        foreach ( $orders as $order ) {
+            $donor_name  = trim( $order->get_billing_first_name() . ' ' . $order->get_billing_last_name() );
+            $donor_email = $order->get_billing_email();
+            foreach ( $order->get_items() as $item ) {
+                $campaign_id = (int) $item->get_meta( '_campaign_id' );
+                if ( ! $campaign_id || ! in_array( $campaign_id, $my_campaign_ids, true ) ) {
+                    continue;
+                }
+                $amount = $item->get_total();
+                if ( is_string( $amount ) ) {
+                    $amount = (float) $amount;
+                }
+                $donations_rows[] = [
+                    'donor_name'  => $donor_name !== '' ? $donor_name : __( 'Guest', 'wp-charity' ),
+                    'donor_email' => $donor_email,
+                    'amount'      => $amount,
+                    'date'        => $order->get_date_created() ? $order->get_date_created()->date_i18n( 'Y-m-d H:i' ) : '',
+                    'campaign_id' => $campaign_id,
+                ];
+            }
+        }
+        usort( $donations_rows, function ( $a, $b ) {
+            return strcmp( $b['date'], $a['date'] );
+        } );
+    }
+
+    $out .= '<h2>' . __( 'Donations to your campaigns', 'wp-charity' ) . '</h2>';
+    if ( ! empty( $donations_rows ) ) {
+        $out .= '<div class="fxm--donations-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
+        foreach ( $donations_rows as $row ) {
+            $campaign = get_post( $row['campaign_id'] );
+            $campaign_name = $campaign && $campaign->post_type === 'campaign' ? $campaign->post_title : __( '(Unknown campaign)', 'wp-charity' );
+            $campaign_url  = get_permalink( $row['campaign_id'] );
+            $out .= '<div class="fxm--donation-box fxm--box">';
+            $out .= '<p style="margin: 0 0 0.5em 0;"><strong>' . wp_kses_post( wc_price( $row['amount'] ) ) . '</strong> <small>' . esc_html( $row['date'] ) . '</small></p>';
+            $out .= '<p style="margin: 0 0 0.5em 0;">' . esc_html( $row['donor_name'] ) . ' · ' . esc_html( $row['donor_email'] ) . '</p>';
+            $out .= '<p style="margin: 0;"><small><a href="' . esc_url( $campaign_url ) . '">' . esc_html( $campaign_name ) . '</a></small></p>';
+            $out .= '</div>';
+        }
+        $out .= '</div>';
+    } else {
+        $out .= '<p>' . __( 'No donations to your campaigns yet.', 'wp-charity' ) . '</p>';
+    }
 
         $out .= '</section>
         <section class="whiskey-tab-content" id="new-campaign">';

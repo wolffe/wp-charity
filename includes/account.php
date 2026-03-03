@@ -1,4 +1,37 @@
 <?php
+/**
+ * Handle "Remind admin to review" link: resend campaign pending email and redirect to account.
+ */
+function cm_maybe_remind_admin_campaign() {
+    if ( ! is_user_logged_in() || ! isset( $_GET['cm_remind_campaign'] ) || ! isset( $_GET['_wpnonce'] ) ) {
+        return;
+    }
+    $campaign_id = (int) $_GET['cm_remind_campaign'];
+    if ( $campaign_id < 1 ) {
+        return;
+    }
+    if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'cm_remind_campaign_' . $campaign_id ) ) {
+        return;
+    }
+    $campaign = get_post( $campaign_id );
+    if ( ! $campaign || $campaign->post_type !== 'campaign' || $campaign->post_status !== 'draft' ) {
+        return;
+    }
+    if ( (int) $campaign->post_author !== get_current_user_id() ) {
+        return;
+    }
+    $account_url = get_permalink( (int) get_option( 'fxm_members_account_page_id' ) );
+    if ( ! $account_url ) {
+        $account_url = home_url( '/' );
+    }
+    if ( function_exists( 'cm_send_admin_campaign_pending_email' ) ) {
+        cm_send_admin_campaign_pending_email( $campaign_id );
+    }
+    wp_safe_redirect( add_query_arg( 'cm_remind_sent', '1', $account_url ) );
+    exit;
+}
+add_action( 'template_redirect', 'cm_maybe_remind_admin_campaign', 5 );
+
 function fxm_user_actions_user_last_login( $user_login, $user ) {
     update_user_meta( $user->ID, 'user_last_login', time() );
 }
