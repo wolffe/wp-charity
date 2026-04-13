@@ -149,6 +149,8 @@ function fxm_account_page() {
 
         if ( ! wp_verify_nonce( $_POST['nonce'], 'wppd_update_user_profile' ) ) {
             $out .= '<div class="notice notice-error"><p>' . __( 'Sorry, your nonce did not verify.', 'wp-charity' ) . '</p></div>';
+        } elseif ( $user_id !== get_current_user_id() ) {
+            $out .= '<div class="notice notice-error"><p>' . __( 'You can only update your own profile.', 'wp-charity' ) . '</p></div>';
         } else {
             $first_name = sanitize_text_field( $_POST['first_name'] );
             $last_name  = sanitize_text_field( $_POST['last_name'] );
@@ -160,15 +162,35 @@ function fxm_account_page() {
             update_user_meta( $user_id, 'user_email', $user_email );
             update_user_meta( $user_id, 'description', $bio );
 
-            // Handle avatar upload
+            // Handle avatar upload (images only; server-side check in addition to accept="image/*")
             if ( ! empty( $_FILES['avatar']['name'] ) ) {
-                require_once ABSPATH . 'wp-admin/includes/image.php';
-                require_once ABSPATH . 'wp-admin/includes/file.php';
-                require_once ABSPATH . 'wp-admin/includes/media.php';
+                $avatar_ok = false;
+                if ( empty( $_FILES['avatar']['error'] ) || (int) $_FILES['avatar']['error'] === UPLOAD_ERR_OK ) {
+                    $image_mimes = [
+                        'jpg|jpeg|jpe' => 'image/jpeg',
+                        'gif'          => 'image/gif',
+                        'png'          => 'image/png',
+                        'webp'         => 'image/webp',
+                        'avif'         => 'image/avif',
+                    ];
+                    $checked = wp_check_filetype_and_ext( $_FILES['avatar']['tmp_name'], $_FILES['avatar']['name'], $image_mimes );
+                    if ( ! empty( $checked['ext'] ) && ! empty( $checked['type'] ) && strpos( (string) $checked['type'], 'image/' ) === 0 ) {
+                        $avatar_ok = true;
+                    }
+                }
+                if ( ! $avatar_ok ) {
+                    $out .= '<p style="background-color: #f1f2f6; padding: 16px; border-radius: 8px;">' . __( 'Profile picture must be a valid image file (JPEG, PNG, GIF, WebP, or AVIF).', 'wp-charity' ) . '</p>';
+                } else {
+                    require_once ABSPATH . 'wp-admin/includes/image.php';
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                    require_once ABSPATH . 'wp-admin/includes/media.php';
 
-                $attachment_id = media_handle_upload( 'avatar', 0 );
-                if ( ! is_wp_error( $attachment_id ) ) {
-                    update_user_meta( $user_id, 'avatar', $attachment_id );
+                    $attachment_id = media_handle_upload( 'avatar', 0 );
+                    if ( ! is_wp_error( $attachment_id ) ) {
+                        update_user_meta( $user_id, 'avatar', $attachment_id );
+                    } else {
+                        $out .= '<p style="background-color: #f1f2f6; padding: 16px; border-radius: 8px;">' . esc_html( $attachment_id->get_error_message() ) . '</p>';
+                    }
                 }
             }
 

@@ -22,7 +22,7 @@ function cm_register_campaign_cpt() {
         'has_archive'         => true,
         'rewrite'             => [ 'slug' => 'campaign' ],
         'supports'            => [ 'title', 'editor', 'author', 'thumbnail', 'excerpt' ],
-        'capability_type'     => 'post',
+        'capability_type'     => 'campaign',
         'map_meta_cap'        => true,
         'hierarchical'        => true,
         'show_in_rest'        => true, // False disables the block editor
@@ -363,8 +363,8 @@ function cm_prevent_status_change( $data, $postarr ) {
         return $data;
     }
 
-    // Allow admins to change status
-    if ( current_user_can( 'administrator' ) ) {
+    // Allow users who can manage all campaigns (e.g. Administrator, Editor) to change status.
+    if ( current_user_can( 'manage_options' ) || current_user_can( 'edit_others_campaigns' ) ) {
         return $data;
     }
 

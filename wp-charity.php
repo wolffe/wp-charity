@@ -1,20 +1,20 @@
 <?php
 /**
  * Plugin Name: WP Charity for WooCommerce
- * Plugin URI: https://getbutterfly.com/wordpress-plugins/wp-charity-wordpress-donation-plugin-fundraising/
+ * Plugin URI: https://4property.com/wordpress-plugins/wp-charity-wordpress-donation-plugin-fundraising/
  * Description: The WordPress fundraising alternative for non-profits, created to help non-profits raise money on their own website.
- * Version: 1.0.9
+ * Version: 1.1.0
  * Author: Ciprian Popescu
  * Author URI: https://getbutterfly.com/
  * Requires at least: 6.0
  * Requires Plugins: woocommerce
- * Tested up to: 6.9.1
+ * Tested up to: 7.0
  * License: GPLv3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: wp-charity
  *
  * WC requires at least: 7.0.0
- * WC tested up to: 10.1.2
+ * WC tested up to: 10.6.2
  *
  * WP Charity for WooCommerce (c) 2024-2026 Ciprian Popescu (https://getbutterfly.com/)
  *
@@ -41,7 +41,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'CM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'CM_PLUGIN_VERSION', '1.0.9' );
+define( 'CM_PLUGIN_VERSION', '1.1.0' );
 
 require_once 'includes/meta.php';
 require_once 'includes/settings.php';
@@ -102,25 +102,98 @@ add_action( 'admin_enqueue_scripts', 'fxm_admin_enqueue_scripts' );
 
 
 
-// Add a new user role "volunteer" with capabilities similar to "author"
+// Add a new user role "volunteer": front-end campaigns only (no posts/pages in wp-admin).
 function cm_add_volunteer_role() {
     add_role(
         'volunteer',
         __( 'Volunteer', 'wp-charity' ),
         [
-            'read'                    => true,
-            'edit_posts'              => true,
-            'delete_posts'            => true,
-            'edit_published_posts'    => true,
-            'publish_posts'           => true,
-            'upload_files'            => true,
-            'edit_campaign'           => true,
-            'edit_others_campaigns'   => false,
-            'delete_others_campaigns' => false,
+            'read'                       => true,
+            'upload_files'               => true,
+            'edit_campaign'              => true,
+            'read_campaign'              => true,
+            'delete_campaign'            => true,
+            'edit_campaigns'             => true,
+            'delete_campaigns'           => true,
+            'edit_published_campaigns'   => true,
+            'publish_campaigns'          => true,
         ]
     );
 }
 register_activation_hook( __FILE__, 'cm_add_volunteer_role' );
+
+/**
+ * Ensure campaign capabilities exist on roles after CPT registration (upgrades + admin/editor access).
+ */
+function cm_sync_campaign_capabilities_for_roles() {
+    $pto = get_post_type_object( 'campaign' );
+    if ( ! $pto || empty( $pto->cap ) || ! is_object( $pto->cap ) ) {
+        return;
+    }
+    $caps = array_unique( array_filter( array_values( (array) $pto->cap ) ) );
+    foreach ( [ 'administrator', 'editor' ] as $role_name ) {
+        $role = get_role( $role_name );
+        if ( ! $role ) {
+            continue;
+        }
+        foreach ( $caps as $cap ) {
+            $role->add_cap( $cap );
+        }
+    }
+    $volunteer = get_role( 'volunteer' );
+    if ( ! $volunteer ) {
+        return;
+    }
+    foreach ( [ 'edit_posts', 'delete_posts', 'edit_published_posts', 'publish_posts', 'edit_pages', 'delete_pages', 'publish_pages', 'edit_published_pages', 'edit_others_posts', 'edit_others_pages' ] as $remove ) {
+        $volunteer->remove_cap( $remove );
+    }
+    foreach ( $caps as $cap ) {
+        if ( strpos( (string) $cap, 'others' ) !== false || strpos( (string) $cap, 'private' ) !== false ) {
+            continue;
+        }
+        $volunteer->add_cap( $cap );
+    }
+}
+add_action( 'init', 'cm_sync_campaign_capabilities_for_roles', 20 );
+
+/**
+ * Volunteers cannot use wp-admin; campaigns are created on the front end only.
+ */
+function cm_redirect_volunteer_from_admin() {
+    if ( ! is_user_logged_in() ) {
+        return;
+    }
+    $user = wp_get_current_user();
+    if ( ! in_array( 'volunteer', (array) $user->roles, true ) ) {
+        return;
+    }
+    if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+        return;
+    }
+    if ( defined( 'DOING_CRON' ) && DOING_CRON ) {
+        return;
+    }
+    $account_id = (int) get_option( 'fxm_members_account_page_id' );
+    $redirect   = $account_id ? get_permalink( $account_id ) : home_url( '/' );
+    wp_safe_redirect( $redirect );
+    exit;
+}
+add_action( 'admin_init', 'cm_redirect_volunteer_from_admin', 1 );
+
+/**
+ * After login, send volunteers to the member account page instead of wp-admin.
+ */
+function cm_volunteer_login_redirect( $redirect_to, $requested_redirect_to, $user ) {
+    if ( $user instanceof WP_User && in_array( 'volunteer', (array) $user->roles, true ) ) {
+        $account_id = (int) get_option( 'fxm_members_account_page_id' );
+        if ( $account_id ) {
+            return get_permalink( $account_id );
+        }
+        return home_url( '/' );
+    }
+    return $redirect_to;
+}
+add_filter( 'login_redirect', 'cm_volunteer_login_redirect', 10, 3 );
 
 // Remove the volunteer role on plugin deactivation
 function cm_remove_volunteer_role() {
