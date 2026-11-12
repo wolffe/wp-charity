@@ -1,6 +1,6 @@
 <?php
 /**
- * Display campaign buttons (Donate, Share, Volunteer)
+ * Display campaign donation box (variation options + Donate, Share, Volunteer buttons)
  *
  * Usage: [campaign_buttons]
  * Optional parameters:
@@ -35,42 +35,14 @@ function cm_campaign_buttons_shortcode( $atts ) {
         return '';
     }
 
-    // Initialize output
-    $output = '';
-
     // Volunteer button (if campaign allows volunteers)
     $volunteer_button = '';
     if ( cm_campaign_allows_volunteers( $parent_id ? $parent_id : $campaign_id ) ) {
-        $volunteer_button = '<a href="' . esc_url( get_permalink( get_option( 'fxm_members_account_page_id' ) ) ) . '" class="fxm--button fxm--button-secondary"><i class="ai-credit-card"></i> ' . __( 'Become a Volunteer', 'wp-charity' ) . '</a>';
+        $volunteer_button = '<a href="' . esc_url( get_permalink( get_option( 'fxm_members_account_page_id' ) ) ) . '" class="fxm--button fxm--button-secondary"><i class="ai-credit-card ai-fw"></i> ' . __( 'Become a Volunteer', 'wp-charity' ) . '</a>';
     }
 
-    // Set justify-content based on align parameter
-    $justify_content = 'flex-start';
-    switch ( strtolower( $atts['align'] ) ) {
-        case 'center':
-            $justify_content = 'center';
-            break;
-        case 'right':
-            $justify_content = 'flex-end';
-            break;
-        default:
-            $justify_content = 'flex-start';
-    }
-
-    // Create buttons HTML
-    $output .= '<div class="campaign-donation">
-        <form class="cart" action="' . esc_url( wc_get_cart_url() ) . '" method="post">
-            <input type="hidden" name="add-to-cart" value="' . esc_attr( $product_id ) . '">
-            <input type="hidden" name="campaign_id" value="' . esc_attr( $campaign_id ) . '">
-            <p style="display: flex; gap: 1em; justify-content: ' . esc_attr( $justify_content ) . ';">
-                <button type="submit" class="fxm--button"><i class="ai-heart"></i> ' . __( 'Donate', 'wp-charity' ) . '</button>
-                <button type="button" onclick="share(event)" class="fxm--button"><i class="ai-network"></i> ' . __( 'Share', 'wp-charity' ) . '</button>' .
-                $volunteer_button .
-            '</p>
-        </form>
-    </div>';
-
-    return $output;
+    // Render the full donation form (variation radios for variable products, plain Donate for simple products)
+    return cm_generate_donation_form( $product_id, $campaign_id, $volunteer_button, $atts['align'] );
 }
 add_shortcode( 'campaign_buttons', 'cm_campaign_buttons_shortcode' );
 

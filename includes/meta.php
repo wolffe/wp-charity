@@ -165,6 +165,9 @@ function cm_unified_campaign_metabox_callback( $post ) {
     echo '<p><label for="donation_goal">' . sprintf( __( 'Donation Goal (%s)', 'wp-charity' ), get_woocommerce_currency_symbol() ) . '</label>';
     echo '<input type="number" id="donation_goal" name="donation_goal" value="' . esc_attr( $donation_goal ) . '" min="0" step="0.01" class="widefat"></p>';
 
+    echo '<p><label><input type="checkbox" name="hide_goal_after_reached" value="1" ' . checked( get_post_meta( $post->ID, '_hide_goal_after_reached', true ), '1', false ) . '> ' . esc_html__( 'Hide goal progress once the target is reached', 'wp-charity' ) . '</label></p>';
+    echo '<p class="description">' . esc_html__( 'Hide the target, percentage, progress bar and goal-reached message after reaching the goal. The amount raised and donation controls remain visible.', 'wp-charity' ) . '</p>';
+
     echo '<p><label for="excerpt">' . __( 'Short Description', 'wp-charity' ) . '</label>';
     echo '<textarea id="excerpt" name="excerpt" rows="4" class="widefat">' . esc_textarea( $post->post_excerpt ) . '</textarea>';
     echo '<p class="description">' . __( 'A short summary of the campaign displayed on the campaign page and in Google Search.', 'wp-charity' ) . '</p></p>';
@@ -182,6 +185,14 @@ function cm_unified_campaign_metabox_callback( $post ) {
     echo '<p><label for="youtube_url">' . __( 'YouTube Video URL', 'wp-charity' ) . '</label>';
     echo '<input type="url" id="youtube_url" name="youtube_url" value="' . esc_attr( $youtube_url ) . '" class="widefat" placeholder="https://www.youtube.com/watch?v=...">';
     echo '<p class="description">' . __( 'Add a YouTube video URL to showcase your campaign. This will be displayed on your campaign page.', 'wp-charity' ) . '</p>';
+
+    // Hide donation box
+    $hide_donation_box = get_post_meta( $post->ID, '_hide_donation_box', true );
+    echo '<p><label>
+        <input type="checkbox" id="hide_donation_box" name="hide_donation_box" value="1" ' . checked( $hide_donation_box, '1', false ) . '>
+        ' . __( 'Hide donation box', 'wp-charity' ) . '
+    </label></p>';
+    echo '<p class="description">' . __( 'Check this box to hide the automatically displayed donation box on the campaign page. Useful when placing it manually with the [campaign_buttons] shortcode.', 'wp-charity' ) . '</p>';
 }
 
 // Save all campaign settings
@@ -224,6 +235,7 @@ function cm_save_unified_campaign_settings( $post_id ) {
     if ( isset( $_POST['donation_goal'] ) ) {
         update_post_meta( $post_id, '_donation_goal', floatval( $_POST['donation_goal'] ) );
     }
+    update_post_meta( $post_id, '_hide_goal_after_reached', isset( $_POST['hide_goal_after_reached'] ) && '1' === $_POST['hide_goal_after_reached'] ? '1' : '0' );
 
     // Save excerpt
     if ( isset( $_POST['excerpt'] ) ) {
@@ -250,6 +262,10 @@ function cm_save_unified_campaign_settings( $post_id ) {
         update_post_meta( $post_id, '_youtube_url', esc_url_raw( $_POST['youtube_url'] ) );
     }
 
+    // Save donation box visibility
+    $hide_donation_box = isset( $_POST['hide_donation_box'] ) ? '1' : '0';
+    update_post_meta( $post_id, '_hide_donation_box', $hide_donation_box );
+
     // Save volunteer settings
     $allow_volunteers = isset( $_POST['allow_volunteer_campaigns'] ) ? '1' : '0';
     update_post_meta( $post_id, '_allow_volunteer_campaigns', $allow_volunteers );
@@ -262,6 +278,54 @@ function cm_campaign_allows_volunteers( $campaign_id ) {
 }
 
 /**
+ * Return the badges shown in the campaign type column.
+ *
+ * @param WP_Post $post Campaign post.
+ * @return array<string,string> Badge class suffixes mapped to labels.
+ */
+function cm_campaign_admin_badges( $post ) {
+    if ( ! $post || 'campaign' !== $post->post_type ) {
+        return [];
+    }
+
+    $badges = [];
+    if ( 0 === (int) $post->post_parent ) {
+        $badges['parent'] = __( 'Parent', 'wp-charity' );
+    } else {
+        $badges['volunteer'] = __( 'Volunteer', 'wp-charity' );
+    }
+    if ( cm_campaign_allows_volunteers( $post->ID ) ) {
+        $badges['volunteers'] = __( 'Allow Volunteer Campaigns', 'wp-charity' );
+    }
+
+    return $badges;
+}
+
+/**
+ * Output campaign badges in the Campaign type list-table column.
+ *
+ * @param string $column_name Current column name.
+ * @param int    $post_id     Campaign post ID.
+ */
+function cm_campaign_column_badges( $column_name, $post_id ) {
+    if ( 'campaign_type' !== $column_name ) {
+        return;
+    }
+
+    $badges = cm_campaign_admin_badges( get_post( $post_id ) );
+    if ( ! $badges ) {
+        return;
+    }
+
+    echo '<div class="cm-campaign-badges">';
+    foreach ( $badges as $class => $label ) {
+        echo '<span class="cm-campaign-badge cm-campaign-badge--' . esc_attr( $class ) . '">' . esc_html( $label ) . '</span>';
+    }
+    echo '</div>';
+}
+add_action( 'manage_campaign_posts_custom_column', 'cm_campaign_column_badges', 10, 2 );
+
+/**
  * Add "Total donated" column to the Campaigns list table in admin.
  */
 function cm_campaign_columns( $columns ) {
@@ -269,8 +333,12 @@ function cm_campaign_columns( $columns ) {
     foreach ( $columns as $key => $label ) {
         $new[ $key ] = $label;
         if ( $key === 'title' ) {
+            $new['campaign_type'] = __( 'Campaign type', 'wp-charity' );
             $new['total_donated'] = __( 'Total donated', 'wp-charity' );
         }
+    }
+    if ( ! isset( $new['campaign_type'] ) ) {
+        $new['campaign_type'] = __( 'Campaign type', 'wp-charity' );
     }
     if ( ! isset( $new['total_donated'] ) ) {
         $new['total_donated'] = __( 'Total donated', 'wp-charity' );
@@ -368,9 +436,11 @@ function cm_prevent_status_change( $data, $postarr ) {
         return $data;
     }
 
-    // For new posts, force draft status
+    // Honour the configured approval choice for a valid volunteer parent.
     if ( empty( $postarr['ID'] ) ) {
-        $data['post_status'] = 'draft';
+        $parent_id = (int) ( $data['post_parent'] ?? 0 );
+        $auto_approve = 'publish' === get_option( 'fxm_volunteer_campaign_status', 'draft' ) && 'campaign' === get_post_type( $parent_id ) && 'publish' === get_post_status( $parent_id ) && cm_campaign_allows_volunteers( $parent_id );
+        $data['post_status'] = $auto_approve ? 'publish' : 'draft';
         return $data;
     }
 

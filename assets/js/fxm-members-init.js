@@ -16,85 +16,6 @@ function share(e, url = window.location.href) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('register-button')) {
-        document.getElementById('register-button').addEventListener('click', (e) => {
-            e.preventDefault();
-
-            document.getElementById('register-button').disabled = true;
-            document.getElementById('register-button').value = 'Registering...';
-
-            const newUserEmail = document.getElementById('new-useremail').value;
-            const newUserPassword = document.getElementById('new-userpassword').value;
-            const newUserPassword2 = document.getElementById('re-pwd').value;
-            const newUserFirstName = document.getElementById('new-firstname').value;
-            const newUserLastName = document.getElementById('new-lastname').value;
-
-            const newUserAgreement = document.getElementById('fxm_tc_agree').checked ? 1 : 0;
-
-            if (
-                newUserEmail.length <= 0 ||
-                newUserPassword.length <= 0 ||
-                newUserPassword2.length <= 0 ||
-                newUserFirstName.length <= 0 ||
-                newUserLastName.length <= 0 ||
-                newUserAgreement != 1 ||
-                newUserPassword !== newUserPassword2
-            ) {
-                const registerMessage = document.querySelector('.register-message');
-                registerMessage.textContent = 'An error has occurred. Please make sure all fields are correctly filled in and passwords match.';
-                registerMessage.style.backgroundColor = '#ff6b81';
-                registerMessage.style.display = 'block';
-
-                registerMessage.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-
-                document.getElementById('register-button').disabled = false;
-                document.getElementById('register-button').value = 'Register';
-
-                return;
-            }
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', wp4pmAjaxVar.ajaxurl, true);
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
-
-            xhr.onreadystatechange = () => {
-                if (xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        const results = xhr.responseText;
-                        const registerMessage = document.querySelector('.register-message');
-                        registerMessage.innerHTML = results;
-                        registerMessage.style.backgroundColor = '#7bed9f';
-                        registerMessage.style.display = 'block';
-
-                        registerMessage.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-
-                        document.getElementById('register-button').disabled = false;
-                        document.getElementById('register-button').value = 'Register';
-                    } else {
-                        const registerMessage = document.querySelector('.register-message');
-                        registerMessage.textContent = 'An error has occurred.';
-                        registerMessage.style.backgroundColor = '#ff6b81';
-                        registerMessage.style.display = 'block';
-
-                        registerMessage.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-
-                        document.getElementById('register-button').disabled = false;
-                        document.getElementById('register-button').value = 'Register';
-                    }
-                }
-            };
-
-            let requestString = '';
-            requestString += '&new_user_email=' + newUserEmail;
-            requestString += '&new_user_password=' + newUserPassword;
-            requestString += '&new_firstname=' + newUserFirstName;
-            requestString += '&new_lastname=' + newUserLastName;
-            requestString += '&loginurl=' + wp4pmAjaxVar.loginurl;
-
-            xhr.send('action=fxm_register_user_front_end' + requestString);
-        });
-    }
-
     // Helpers to sanitize inherited content from Gutenberg/block editor
     function stripGutenbergComments(html) {
         // Remove Gutenberg block comments like <!-- wp:paragraph --> and <!-- /wp:paragraph -->
@@ -249,43 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-
-    /**
-     * Tabs
-     */
-    if (document.querySelectorAll(".whiskey-tabs li a")) {
-        var tabLinks = document.querySelectorAll(".whiskey-tabs li a");
-
-        for (var i = 0; i < tabLinks.length; i++) {
-            tabLinks[i].onclick = function () {
-                var target = this.getAttribute("href").replace("#", "");
-                var sections = document.querySelectorAll(".whiskey-tab-content");
-
-                for (var j = 0; j < sections.length; j++) {
-                    sections[j].style.display = "none";
-                }
-
-                document.getElementById(target).style.display = "block";
-
-                for (var k = 0; k < tabLinks.length; k++) {
-                    tabLinks[k].removeAttribute("class");
-                }
-
-                this.setAttribute("class", "is-active");
-
-                // Change the URL hash based on the selected tab
-                history.pushState(null, null, "#" + target);
-
-                return false;
-            }
-        };
-
-        // Enable link to tab
-        var hash = document.location.hash;
-        if (hash && document.querySelector(`.whiskey-tabs li a[href="${hash}"]`)) {
-            document.querySelectorAll(`.whiskey-tabs li a[href="${hash}"]`)[0].click();
-        }
-    }
 
     // Handle variation forms
     const variationForms = document.querySelectorAll('.campaign-donation .variations_form');

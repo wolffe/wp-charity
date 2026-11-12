@@ -3,6 +3,7 @@ function fxm_create_campaign() {
     if ( is_user_logged_in() ) {
         $out             = ''; // Initialize the output variable
         $current_user_id = get_current_user_id();
+        if ( ! current_user_can( 'edit_campaigns' ) ) { return '<p>' . esc_html__( 'You do not have permission to manage campaigns.', 'wp-charity' ) . '</p>'; }
 
         // Handle form submission for new or edited campaign
         if ( $_SERVER['REQUEST_METHOD'] == 'POST' && isset( $_POST['submit_campaign'] ) ) {
@@ -11,18 +12,23 @@ function fxm_create_campaign() {
                 wp_die( 'Invalid nonce' );
             }
 
-            $title              = sanitize_text_field( $_POST['campaign_title'] );
-            $short_description  = sanitize_textarea_field( $_POST['short_description'] );
-            $long_description   = wp_kses_post( $_POST['long_description'] );
-            $donation_goal      = floatval( $_POST['donation_goal'] );
-            $start_date         = sanitize_text_field( $_POST['start_date'] );
-            $end_date           = sanitize_text_field( $_POST['end_date'] );
-            $status             = isset( $_POST['campaign_status'] ) ? sanitize_text_field( $_POST['campaign_status'] ) : 'draft';
-            $parent_campaign_id = isset( $_POST['parent_campaign'] ) ? intval( $_POST['parent_campaign'] ) : 0;
+            $title              = sanitize_text_field( cm_post_text( 'campaign_title' ) );
+            $short_description  = sanitize_textarea_field( cm_post_text( 'short_description' ) );
+            $long_description   = wp_kses_post( cm_post_text( 'long_description' ) );
+            $donation_goal      = floatval( cm_post_text( 'donation_goal' ) );
+            $start_date         = sanitize_text_field( cm_post_text( 'start_date' ) );
+            $end_date           = sanitize_text_field( cm_post_text( 'end_date' ) );
+            $parent_campaign_id = absint( cm_post_text( 'parent_campaign' ) );
 
             // Check if this is an edit or a new campaign
-            $campaign_id = isset( $_POST['campaign_id'] ) ? intval( $_POST['campaign_id'] ) : 0;
+            $campaign_id = absint( cm_post_text( 'campaign_id' ) );
 
+            $existing = $campaign_id ? get_post( $campaign_id ) : null;
+            if ( $campaign_id && ! cm_can_edit_account_campaign( $existing ) ) { return '<p role="alert">' . esc_html__( 'You cannot edit this campaign.', 'wp-charity' ) . '</p>'; }
+            $parent = get_post( $parent_campaign_id );
+            if ( ! $parent_campaign_id || ! $parent || 'campaign' !== $parent->post_type || 'publish' !== $parent->post_status || ! cm_campaign_allows_volunteers( $parent_campaign_id ) || $parent_campaign_id === $campaign_id || ( $campaign_id && in_array( $campaign_id, get_post_ancestors( $parent_campaign_id ), true ) ) ) { return '<p role="alert">' . esc_html__( 'Choose a published campaign that accepts volunteers.', 'wp-charity' ) . '</p>'; }
+            if ( '' === trim( $title ) || ! cm_validate_image_upload( 'campaign_image' ) ) { return '<p role="alert">' . esc_html__( 'Enter a title and choose a valid campaign image.', 'wp-charity' ) . '</p>'; }
+            $is_update = $campaign_id > 0;
             $post_data = [
                 'post_title'   => $title,
                 'post_content' => $long_description,
@@ -30,24 +36,25 @@ function fxm_create_campaign() {
                 'post_status'  => $parent_campaign_id ? get_option( 'fxm_volunteer_campaign_status', 'draft' ) : 'publish', // Use setting for volunteer campaigns
                 'post_type'    => 'campaign',
                 'post_parent'  => $parent_campaign_id, // Set the parent campaign
-                'post_author'  => get_current_user_id(),
+                'post_author'  => $existing ? $existing->post_author : $current_user_id,
             ];
 
             if ( $campaign_id > 0 ) {
                 // Update existing campaign
                 $post_data['ID'] = $campaign_id;
-                $campaign_id     = wp_update_post( $post_data );
+                $campaign_id     = wp_update_post( wp_slash( $post_data ), true );
             } else {
                 // Insert new campaign
-                $campaign_id = wp_insert_post( $post_data );
+                $campaign_id = wp_insert_post( wp_slash( $post_data ), true );
             }
 
             if ( $campaign_id && ! is_wp_error( $campaign_id ) ) {
                 // Save meta fields
                 update_post_meta( $campaign_id, '_donation_goal', $donation_goal );
+                update_post_meta( $campaign_id, '_hide_goal_after_reached', '1' === cm_post_text( 'hide_goal_after_reached' ) ? '1' : '0' );
                 update_post_meta( $campaign_id, '_start_date', $start_date );
                 update_post_meta( $campaign_id, '_end_date', $end_date );
-                update_post_meta( $campaign_id, '_youtube_url', esc_url_raw( $_POST['youtube_url'] ) );
+                update_post_meta( $campaign_id, '_youtube_url', esc_url_raw( cm_post_text( 'youtube_url' ) ) );
 
                 // Handle image upload
                 if ( ! empty( $_FILES['campaign_image']['name'] ) ) {
@@ -56,27 +63,27 @@ function fxm_create_campaign() {
                     require_once ABSPATH . 'wp-admin/includes/media.php';
 
                     $attachment_id = media_handle_upload( 'campaign_image', $campaign_id );
-                    if ( ! is_wp_error( $attachment_id ) ) {
-                        set_post_thumbnail( $campaign_id, $attachment_id );
-                    }
+                    if ( is_wp_error( $attachment_id ) ) { return '<p role="alert">' . esc_html__( 'The campaign was saved, but its image could not be uploaded. Please edit the campaign and try the image again.', 'wp-charity' ) . '</p>'; }
+                    set_post_thumbnail( $campaign_id, $attachment_id );
                 }
 
                 $saved_campaign = get_post( $campaign_id );
                 if ( $saved_campaign && $saved_campaign->post_status === 'draft' ) {
                     $out .= '<div class="fxm--notification fxm--notification-success">' . __( 'Your campaign has been submitted and is pending approval. We\'ll notify you once it\'s reviewed.', 'wp-charity' ) . '</div>';
                 } else {
-                    $out .= '<div class="fxm--notification fxm--notification-success">' . sprintf( __( 'Campaign %s successfully!', 'wp-charity' ), ( $campaign_id ? __( 'updated', 'wp-charity' ) : __( 'submitted', 'wp-charity' ) ) ) . '</div>';
+                    $out .= '<div class="fxm--notification fxm--notification-success">' . sprintf( __( 'Campaign %s successfully!', 'wp-charity' ), ( $is_update ? __( 'updated', 'wp-charity' ) : __( 'submitted', 'wp-charity' ) ) ) . '</div>';
                 }
 
                 return $out;
             } else {
-                $out .= '<div class="fxm--notification fxm--notification-error">' . sprintf( __( 'There was an error %s the campaign.', 'wp-charity' ), ( $campaign_id ? __( 'updating', 'wp-charity' ) : __( 'submitting', 'wp-charity' ) ) ) . '</div>';
+                $out .= '<div class="fxm--notification fxm--notification-error">' . sprintf( __( 'There was an error %s the campaign.', 'wp-charity' ), ( $is_update ? __( 'updating', 'wp-charity' ) : __( 'submitting', 'wp-charity' ) ) ) . '</div>';
             }
         }
 
         // Handle edit request
         $edit_campaign_id = isset( $_GET['edit_campaign'] ) ? intval( $_GET['edit_campaign'] ) : 0;
         $edit_campaign    = $edit_campaign_id ? get_post( $edit_campaign_id ) : null;
+        if ( $edit_campaign_id && ! cm_can_edit_account_campaign( $edit_campaign ) ) { return '<p role="alert">' . esc_html__( 'You cannot edit this campaign.', 'wp-charity' ) . '</p>'; }
 
         // Get parent campaigns with _allow_volunteer_campaigns = 1
         $parent_campaigns = get_posts(
@@ -101,7 +108,7 @@ function fxm_create_campaign() {
                     <p>
                         <label for="parent_campaign">' . __( 'Choose the campaign you would like to raise money for', 'wp-charity' ) . '</label>
                         <select name="parent_campaign" id="parent_campaign" required>
-                            <option value="0">' . __( 'Select a Campaign...', 'wp-charity' ) . '</option>';
+                            <option value="">' . __( 'Select a Campaign...', 'wp-charity' ) . '</option>';
 
         foreach ( $parent_campaigns as $parent ) {
             $out .= '<option value="' . $parent->ID . '" ' . ( $edit_campaign && $edit_campaign->post_parent == $parent->ID ? 'selected' : '' ) . '>' . esc_html( $parent->post_title ) . '</option>';
@@ -130,6 +137,10 @@ function fxm_create_campaign() {
                         <label for="donation_goal">' . sprintf( __( 'Fundraising Goal (%s)', 'wp-charity' ), get_woocommerce_currency_symbol() ) . '</label>
                         <input type="number" name="donation_goal" id="donation_goal" step="10" value="' . ( $edit_campaign ? esc_attr( get_post_meta( $edit_campaign->ID, '_donation_goal', true ) ) : '' ) . '" required>
                         <br><small>' . __( 'Enter your fundraising goal. If you selected a parent campaign, this will be pre-filled with their goal.', 'wp-charity' ) . '</small>
+                    </p>
+                    <p>
+                        <label><input type="checkbox" name="hide_goal_after_reached" value="1" ' . checked( $edit_campaign ? get_post_meta( $edit_campaign->ID, '_hide_goal_after_reached', true ) : '', '1', false ) . '> ' . esc_html__( 'Hide goal progress once the target is reached', 'wp-charity' ) . '</label>
+                        <br><small>' . esc_html__( 'Hide the target, percentage, progress bar and goal-reached message after reaching the goal. The amount raised and donation controls remain visible.', 'wp-charity' ) . '</small>
                     </p>
                     <div class="fxm--grid-container" style="--columns:2">
                         <p>

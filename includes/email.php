@@ -10,6 +10,8 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+require_once __DIR__ . '/author-donations.php';
+
 /**
  * Get campaign details (name and permalink) for a given order ID
  *

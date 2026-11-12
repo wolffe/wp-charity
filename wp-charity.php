@@ -3,18 +3,18 @@
  * Plugin Name: WP Charity for WooCommerce
  * Plugin URI: https://4property.com/wordpress-plugins/wp-charity-wordpress-donation-plugin-fundraising/
  * Description: The WordPress fundraising alternative for non-profits, created to help non-profits raise money on their own website.
- * Version: 1.1.0
+ * Version: 1.2.6
  * Author: Ciprian Popescu
  * Author URI: https://getbutterfly.com/
- * Requires at least: 6.0
+ * Requires at least: 7.1
  * Requires Plugins: woocommerce
- * Tested up to: 7.0
+ * Tested up to: 7.1.3
  * License: GPLv3
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain: wp-charity
  *
  * WC requires at least: 7.0.0
- * WC tested up to: 10.6.2
+ * WC tested up to: 11.2.1
  *
  * WP Charity for WooCommerce (c) 2024-2026 Ciprian Popescu (https://getbutterfly.com/)
  *
@@ -41,7 +41,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 define( 'CM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
-define( 'CM_PLUGIN_VERSION', '1.1.0' );
+define( 'CM_PLUGIN_VERSION', '1.2.6' );
+
+require_once 'includes/donations.php';
+require_once 'includes/account-actions.php';
 
 require_once 'includes/meta.php';
 require_once 'includes/settings.php';
@@ -202,7 +205,7 @@ function cm_remove_volunteer_role() {
 register_deactivation_hook( __FILE__, 'cm_remove_volunteer_role' );
 
 
-// Display the parent campaign's associated product on child campaign pages
+// Display the campaign content and its associated donation product.
 function cm_display_product_on_child_campaign( $content ) {
     if ( ! is_singular( 'campaign' ) || ! in_the_loop() || ! is_main_query() ) {
         return $content;
@@ -210,145 +213,126 @@ function cm_display_product_on_child_campaign( $content ) {
 
     global $post;
 
+    $rendered_campaign_content = $content;
     $content                    = '';
     $parent_id                  = wp_get_post_parent_id( $post->ID );
-    $product_id                 = get_post_meta( $post->ID, '_cm_product_id', true );
-    $parent_campaign            = get_post( $parent_id );
+    $parent_campaign            = $parent_id ? get_post( $parent_id ) : null;
+    $is_child                   = $parent_campaign && 'campaign' === $parent_campaign->post_type;
+    $product_source_id          = $is_child ? $parent_id : $post->ID;
+    $product_id                 = get_post_meta( $product_source_id, '_cm_product_id', true );
     $parent_campaign_volunteers = '';
+    $hide_donation_box          = get_post_meta( $post->ID, '_hide_donation_box', true ) === '1';
 
-    $campaign_thumbnail = ( has_post_thumbnail( $post->ID ) ) ? '<div class="fxm--campaign-thumbnail">' . get_the_post_thumbnail( $post->ID, 'full' ) . '</div>' : '';
-    $campaign_excerpt   = ( ! empty( $post->post_excerpt ) ) ? '<p>' . wp_kses_post( $post->post_excerpt ) . '</p>' : '';
-    $campaign_content   = ( ! empty( $post->post_content ) ) ? wpautop( wp_kses_post( $post->post_content ) ) : '';
+    $campaign_thumbnail = has_post_thumbnail( $post->ID ) ? '<div class="fxm--campaign-thumbnail">' . get_the_post_thumbnail( $post->ID, 'full' ) . '</div>' : '';
+    $campaign_excerpt   = ! empty( $post->post_excerpt ) ? '<div class="fxm--campaign-summary">' . wpautop( wp_kses_post( $post->post_excerpt ) ) . '</div>' : '';
+    $campaign_content   = '' !== trim( $rendered_campaign_content ) ? '<div class="fxm--campaign-story">' . $rendered_campaign_content . '</div>' : '';
 
     // Campaign dates
     $campaign_dates = '';
     $start_date     = get_post_meta( $post->ID, '_start_date', true );
     $end_date       = get_post_meta( $post->ID, '_end_date', true );
 
-    if ( $start_date ) {
-        $campaign_dates .= '<div style="text-align:center"><small>Starts on <strong>' . esc_html( date_i18n( get_option( 'date_format' ), strtotime( $start_date ) ) ) . '</strong></small></div>';
-    }
-    if ( $end_date ) {
-        $campaign_dates .= '<div style="text-align:center"><small>Donations available until ' . esc_html( date_i18n( get_option( 'date_format' ), strtotime( $end_date ) ) ) . '</small></div>';
+    if ( $start_date || $end_date ) {
+        $campaign_dates = '<div class="fxm--campaign-dates">';
+        if ( $start_date ) {
+            $campaign_dates .= '<div><span>' . esc_html__( 'Starts', 'wp-charity' ) . '</span><strong>' . esc_html( date_i18n( get_option( 'date_format' ), strtotime( $start_date ) ) ) . '</strong></div>';
+        }
+        if ( $end_date ) {
+            $campaign_dates .= '<div><span>' . esc_html__( 'Donations available until', 'wp-charity' ) . '</span><strong>' . esc_html( date_i18n( get_option( 'date_format' ), strtotime( $end_date ) ) ) . '</strong></div>';
+        }
+        $campaign_dates .= '</div>';
     }
 
     // QR code
     $qr_code = cm_generate_qr_code( get_permalink() );
 
-    if ( ! $parent_id ) {
-        // This is a campaign without a parent campaign, show simplified content
-
-        // If the campaign allows volunteers, show the volunteer link
-        if ( cm_campaign_allows_volunteers( $post->ID ) ) {
-            $parent_campaign_volunteers = '<a href="' . esc_url( get_permalink( get_option( 'fxm_members_account_page_id' ) ) ) . '" class="fxm--button fxm--button-secondary"><i class="ai-credit-card"></i> Become a Volunteer</a>';
-        }
-
-        $content .= '<div class="campaign-content">';
-
-        $content .= $campaign_content;
-
-        // Add QR code
-        $content .= $qr_code;
-
-        // Add donation button
-        if ( $product_id ) {
-            $content .= cm_generate_donation_form( $product_id, $post->ID, $parent_campaign_volunteers );
-        }
-
-        // Add the orders display
-        $content .= cm_display_campaign_orders();
-
-        $content .= '</div>';
-
-        return $content;
+    if ( ! $is_child && cm_campaign_allows_volunteers( $post->ID ) ) {
+        $parent_campaign_volunteers = '<a href="' . esc_url( get_permalink( get_option( 'fxm_members_account_page_id' ) ) ) . '" class="fxm--button fxm--button-secondary"><i class="ai-credit-card ai-fw"></i> ' . esc_html__( 'Become a Volunteer', 'wp-charity' ) . '</a>';
     }
 
-    // This is a child campaign, show the full layout (parent details + child details)
-    if ( $parent_campaign ) {
-        //$parent_campaign_thumbnail = ( has_post_thumbnail( $parent_id ) ) ? '<p>' . get_the_post_thumbnail( $parent_id, 'medium' ) . '</p>' : '';
-        //$parent_campaign_excerpt   = ( ! empty( $parent_campaign->post_excerpt ) ) ? '<p>' . wp_kses_post( $parent_campaign->post_excerpt ) . '</p>' : '';
-        $campaign_buttons = '';
+    $campaign_buttons = '';
+    if ( $product_id && ! $hide_donation_box ) {
+        $product = wc_get_product( $product_id );
+        if ( $product ) {
+            $campaign_buttons = '<div class="campaign-product">' . cm_generate_donation_form( $product_id, $post->ID, $is_child ? '' : $parent_campaign_volunteers ) . '</div>';
+        }
+    }
 
-        // If the campaign allows volunteers, show the volunteer link
+    $youtube_url    = get_post_meta( $post->ID, '_youtube_url', true );
+    $youtube_embed  = $youtube_url ? wp_oembed_get( $youtube_url ) : '';
+    $campaign_media = '';
+    if ( $campaign_thumbnail && $youtube_embed ) {
+        $tab_name = 'campaign-media-' . (int) $post->ID;
+        $info_id  = 'campaign-info-' . (int) $post->ID;
+        $video_id = 'campaign-video-' . (int) $post->ID;
+        $campaign_media = '<div class="fxm--campaign-tabs">
+            <input class="fxm--tab-control" type="radio" name="' . esc_attr( $tab_name ) . '" id="' . esc_attr( $info_id ) . '" checked="checked">
+            <label for="' . esc_attr( $info_id ) . '">' . esc_html__( 'Info', 'wp-charity' ) . '</label>
+            <div class="tab">' . $campaign_thumbnail . '</div>
+            <input class="fxm--tab-control" type="radio" name="' . esc_attr( $tab_name ) . '" id="' . esc_attr( $video_id ) . '">
+            <label for="' . esc_attr( $video_id ) . '">' . esc_html__( 'Video', 'wp-charity' ) . '</label>
+            <div class="tab fxm--campaign-video">' . $youtube_embed . '</div>
+        </div>';
+    } elseif ( $campaign_thumbnail ) {
+        $campaign_media = $campaign_thumbnail;
+    } elseif ( $youtube_embed ) {
+        $campaign_media = '<div class="fxm--campaign-video">' . $youtube_embed . '</div>';
+    }
+
+    $parent_context = '';
+    if ( $is_child ) {
         if ( cm_campaign_allows_volunteers( $parent_id ) ) {
-            $parent_campaign_volunteers = '<a href="' . esc_url( get_permalink( get_option( 'fxm_members_account_page_id' ) ) ) . '" class="fxm--button fxm--button-tertiary fxm--button-small"><i class="ai-credit-card"></i> Become a Volunteer</a>';
+            $parent_campaign_volunteers = '<a href="' . esc_url( get_permalink( get_option( 'fxm_members_account_page_id' ) ) ) . '" class="fxm--button fxm--button-secondary fxm--button-small"><i class="ai-credit-card ai-fw"></i> ' . esc_html__( 'Become a Volunteer', 'wp-charity' ) . '</a>';
         }
+        $parent_context = '<div class="fxm--campaign-parent" role="note" aria-label="' . esc_attr__( 'Parent campaign', 'wp-charity' ) . '">
+            <i class="ai-info ai-fw" aria-hidden="true"></i>
+            <div><span>' . esc_html__( 'Part of', 'wp-charity' ) . '</span>
+            <a href="' . esc_url( get_permalink( $parent_id ) ) . '">' . esc_html( $parent_campaign->post_title ) . '</a></div>' .
+            $parent_campaign_volunteers .
+        '</div>';
+    }
 
-        $product_id = get_post_meta( $parent_id ? $parent_id : $post->ID, '_cm_product_id', true );
-
-        if ( $product_id ) {
-            $product = wc_get_product( $product_id );
-
-            if ( $product ) {
-                $campaign_buttons = '<div class="campaign-product">' .
-                    cm_generate_donation_form( $product_id, $post->ID ) .
-                    $campaign_dates .
-                '</div>';
-            }
-        }
-
-        // Check if a video is available, and if it is, build a tab for it
-        $youtube_video_tab = '';
-        $youtube_url       = get_post_meta( $post->ID, '_youtube_url', true );
-
-        if ( $youtube_url ) {
-            $youtube_video_tab = '<input type="radio" name="tabs" id="tabtwo">
-            <label for="tabtwo">Video</label>
-            <div class="tab">' . wp_oembed_get( $youtube_url ) . '</div>';
-        }
-
-        // Child campaign details
-        $content .= '<div class="fxm--grid-container" style="--columns:2; grid-template-columns: 2fr 1fr;">
-            <div>
-                <div class="fxm--campaign-tabs">
-                    <input type="radio" name="tabs" id="tabone" checked="checked">
-                    <label for="tabone">Info</label>
-                    <div class="tab">' .
-                        $campaign_thumbnail .
-                    '</div>' .
-                    $youtube_video_tab .
-                '</div>' .
-
-                cm_display_campaign_author( $post ) .
+    $author = $is_child ? cm_display_campaign_author( $post ) : '';
+    $content = '<div class="fxm-campaign-page">
+        <div class="fxm-campaign-layout">
+            <div class="fxm-campaign-main">' .
+                $campaign_media .
+                $author .
                 $campaign_content .
-                $qr_code .
-
-            '</div>
-            <div style="display:block">
-                <!-- Parent campaign summary -->
-                <div class="fxm--box fxm--box-compact" style="text-align:center">
-                    <div>
-                        <small><i class="ai-info"></i> This campaign is part of the <a href="' . esc_url( get_permalink( $parent_id ) ) . '"><strong>' . esc_html( $parent_campaign->post_title ) . '</strong></a>.</small>
-                        <hr>' .
-                        $parent_campaign_volunteers .
-                    '</div>
-                </div>
-
-                <div class="fxm--donation-goal" style="position:sticky;top:0">
+                '<div class="fxm-campaign-share">' . $qr_code . '</div>
+            </div>
+            <div class="fxm-campaign-sidebar" role="complementary" aria-label="' . esc_attr__( 'Campaign donation', 'wp-charity' ) . '">' .
+                $parent_context .
+                '<div class="fxm--donation-goal">
                     <div class="fxm--box">' .
-
                         cm_display_campaign_goal( $post->ID ) .
                         $campaign_buttons .
-
+                        $campaign_dates .
                     '</div>' .
-
                     $campaign_excerpt .
                     cm_display_campaign_orders() .
-
                 '</div>
             </div>
-        </div>';
-    }
+        </div>
+    </div>';
 
     return $content;
 }
 
-add_filter( 'the_content', 'cm_display_product_on_child_campaign' );
+add_filter( 'the_content', 'cm_display_product_on_child_campaign', 20 );
 
 /**
  * Generate donation form with variation support
+ *
+ * @param int    $product_id         WooCommerce product ID.
+ * @param int    $campaign_id        Campaign post ID.
+ * @param string $additional_buttons Extra button HTML appended after Donate/Share.
+ * @param string $align              Button row alignment: left, center or right.
  */
-function cm_generate_donation_form( $product_id, $campaign_id, $additional_buttons = '' ) {
+function cm_generate_donation_form( $product_id, $campaign_id, $additional_buttons = '', $align = 'center' ) {
+    static $form_instance = 0;
+    static $js_enqueued   = false;
+
     if ( ! $product_id ) {
         return '';
     }
@@ -356,6 +340,19 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
     $product = wc_get_product( $product_id );
     if ( ! $product ) {
         return '';
+    }
+
+    $form_instance++;
+
+    switch ( strtolower( $align ) ) {
+        case 'left':
+            $justify_content = 'flex-start';
+            break;
+        case 'right':
+            $justify_content = 'flex-end';
+            break;
+        default:
+            $justify_content = 'center';
     }
 
     $form_content = '';
@@ -374,25 +371,35 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
                     <div class="variations">
                         <div class="variations-container">';
 
+            $default_attributes = $product->get_default_attributes();
+
             foreach ( $attributes as $attribute_name => $options ) {
                 $attribute_label = wc_attribute_label( $attribute_name );
                 $sanitized_name  = sanitize_title( $attribute_name );
+                $default_value   = isset( $default_attributes[ $sanitized_name ] ) ? $default_attributes[ $sanitized_name ] : '';
 
                 $form_content .= '<div class="variation-row">
                     <div class="variation-label">
-                        <label for="' . esc_attr( $sanitized_name ) . '">' . esc_html( $attribute_label ) . '</label>
+                        <label>' . esc_html( $attribute_label ) . '</label>
                     </div>
                     <div class="variation-value">
-                        <select id="' . esc_attr( $sanitized_name ) . '" name="attribute_' . esc_attr( $sanitized_name ) . '" data-attribute_name="attribute_' . esc_attr( $sanitized_name ) . '" class="variation-select">
-                            <option value="">Choose ' . esc_html( strtolower( $attribute_label ) ) . '...</option>';
+                        <div class="variation-radios" data-attribute_name="attribute_' . esc_attr( $sanitized_name ) . '">';
 
                 if ( ! empty( $options ) ) {
                     foreach ( $options as $option ) {
-                        $form_content .= '<option value="' . esc_attr( $option ) . '">' . esc_html( $option ) . '</option>';
+                        $option_label = is_numeric( $option )
+                            ? sprintf( get_woocommerce_price_format(), get_woocommerce_currency_symbol(), $option )
+                            : $option;
+                        $input_id = $sanitized_name . '_' . sanitize_title( $option ) . '_' . $form_instance;
+
+                        $form_content .= '<label class="variation-radio" for="' . esc_attr( $input_id ) . '">
+                            <input type="radio" id="' . esc_attr( $input_id ) . '" name="attribute_' . esc_attr( $sanitized_name ) . '" value="' . esc_attr( $option ) . '" ' . checked( $default_value, $option, false ) . '>
+                            <span>' . esc_html( $option_label ) . '</span>
+                        </label>';
                     }
                 }
 
-                $form_content .= '</select>
+                $form_content .= '</div>
                     </div>
                 </div>';
             }
@@ -403,9 +410,9 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
                     <div class="single_variation_wrap">
                         <div class="woocommerce-variation single_variation" style="display: none;"></div>
                         <div class="woocommerce-variation-add-to-cart variations_button">
-                            <p style="display: flex; gap: 1em; justify-content: center;">
-                                <button type="submit" class="fxm--button single_add_to_cart_button" disabled><i class="ai-heart"></i> Donate</button>
-                                <button type="button" onclick="share(event)" class="fxm--button"><i class="ai-network"></i> Share</button>
+                            <p class="fxm--campaign-actions" style="--fxm-action-alignment: ' . esc_attr( $justify_content ) . ';">
+                                <button type="submit" class="fxm--button single_add_to_cart_button" disabled><i class="ai-heart ai-fw"></i> Donate</button>
+                                <button type="button" onclick="share(event)" class="fxm--button"><i class="ai-network ai-fw"></i> Share</button>
                                 ' . $additional_buttons . '
                             </p>
                             <input type="hidden" name="add-to-cart" value="' . esc_attr( $product_id ) . '">
@@ -416,15 +423,16 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
                 </form>
             </div>';
 
-            // Enqueue WooCommerce variation scripts
-            if ( function_exists( 'wc_enqueue_js' ) ) {
+            // Enqueue WooCommerce variation scripts (once per request; the script handles every .variations_form on the page)
+            if ( function_exists( 'wc_enqueue_js' ) && ! $js_enqueued ) {
+                $js_enqueued = true;
                 wc_enqueue_js(
                     "
                     jQuery(document).ready(function($) {
                         console.log('Variation form handler loaded');
                         $('.variations_form').each(function() {
                             var \$form = $(this);
-                            var \$variationSelects = \$form.find('.variation-select');
+                            var \$variationGroups = \$form.find('.variation-radios');
                             var \$submitButton = \$form.find('.single_add_to_cart_button');
                             var \$variationContainer = \$form.find('.single_variation');
                             var \$variationIdInput = \$form.find('.variation_id');
@@ -433,8 +441,8 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
                             
                             function checkAllSelected() {
                                 var allSelected = true;
-                                \$variationSelects.each(function() {
-                                    if (!$(this).val()) {
+                                \$variationGroups.each(function() {
+                                    if (!$(this).find('input:checked').val()) {
                                         allSelected = false;
                                         return false;
                                     }
@@ -444,8 +452,9 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
                             
                             function hasCustomVariation() {
                                 var hasCustom = false;
-                                \$variationSelects.each(function() {
-                                    if ($(this).val().toLowerCase() === 'custom') {
+                                \$variationGroups.each(function() {
+                                    var val = $(this).find('input:checked').val();
+                                    if (val && val.toLowerCase() === 'custom') {
                                         hasCustom = true;
                                         return false;
                                     }
@@ -457,9 +466,9 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
                                 if (!variations) return null;
                                 
                                 var selectedAttributes = {};
-                                \$variationSelects.each(function() {
+                                \$variationGroups.each(function() {
                                     var attributeName = $(this).data('attribute_name');
-                                    selectedAttributes[attributeName] = $(this).val();
+                                    selectedAttributes[attributeName] = $(this).find('input:checked').val();
                                 });
                                 
                                 for (var i = 0; i < variations.length; i++) {
@@ -538,7 +547,7 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
                                 }
                             }
                             
-                            \$variationSelects.on('change', updateVariation);
+                            \$variationGroups.find('input[type=radio]').on('change', updateVariation);
                             updateVariation();
                         });
                     });
@@ -552,9 +561,9 @@ function cm_generate_donation_form( $product_id, $campaign_id, $additional_butto
             <form class="cart" action="' . esc_url( wc_get_cart_url() ) . '" method="post">
                 <input type="hidden" name="add-to-cart" value="' . esc_attr( $product_id ) . '">
                 <input type="hidden" name="campaign_id" value="' . esc_attr( $campaign_id ) . '">
-                <p style="display: flex; gap: 1em; justify-content: center;">
-                    <button type="submit" class="fxm--button"><i class="ai-heart"></i> Donate</button>
-                    <button type="button" onclick="share(event)" class="fxm--button"><i class="ai-network"></i> Share</button>
+                <p class="fxm--campaign-actions" style="--fxm-action-alignment: ' . esc_attr( $justify_content ) . ';">
+                    <button type="submit" class="fxm--button"><i class="ai-heart ai-fw"></i> Donate</button>
+                    <button type="button" onclick="share(event)" class="fxm--button"><i class="ai-network ai-fw"></i> Share</button>
                     ' . $additional_buttons . '
                 </p>
             </form>
@@ -585,139 +594,23 @@ add_action( 'woocommerce_checkout_create_order_line_item', 'cm_save_campaign_id_
  * Campaign stats: cached totals and recent orders per campaign
  */
 function cm_get_campaign_stats( $campaign_id ) {
-    $cache_key = 'cm_campaign_stats_' . (int) $campaign_id;
-    $stats     = get_transient( $cache_key );
-
-    if ( false !== $stats ) {
-        return $stats;
-    }
-
-    $total_raised    = 0.0;
-    $order_summaries = [];
-
-    $orders = wc_get_orders(
-        [
-            'limit'  => -1,
-            'status' => [ 'completed', 'processing', 'on-hold' ],
-            'type'   => 'shop_order',
-        ]
-    );
-
-    foreach ( $orders as $order ) {
-        foreach ( $order->get_items() as $item ) {
-            $item_campaign_id = $item->get_meta( '_campaign_id' );
-            if ( (int) $item_campaign_id === (int) $campaign_id ) {
-                $total_raised     += (float) $order->get_total();
-                $order_summaries[] = [
-                    'order_id'  => $order->get_id(),
-                    'timestamp' => $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0,
-                    'total'     => (float) $order->get_total(),
-                    'status'    => $order->get_status(),
-                ];
-                break; // no need to check more items in this order
-            }
-        }
-    }
-
-    // Sort newest first
-    usort(
-        $order_summaries,
-        function ( $a, $b ) {
-            return $b['timestamp'] <=> $a['timestamp'];
-        }
-    );
-
-    $stats = [
-        'total_raised' => $total_raised,
-        'orders'       => $order_summaries,
-    ];
-
-    // Cache for 12 hours; cache is also actively invalidated on order changes
-    set_transient( $cache_key, $stats, 12 * HOUR_IN_SECONDS );
-
-    return $stats;
+    $summary = cm_campaign_summaries( [ (int) $campaign_id ] );
+    return [ 'total_raised' => $summary[ (int) $campaign_id ]['order_total'], 'order_count' => $summary[ (int) $campaign_id ]['order_count'] ];
 }
 
-/**
- * Get total amount donated to a campaign (sum of line item totals).
- * For parent campaigns that allow volunteer campaigns, includes totals of all child campaigns.
- *
- * @param int $campaign_id Campaign post ID.
- * @return float Total donated.
- */
 function cm_get_campaign_total_donated( $campaign_id ) {
-    $campaign_id = (int) $campaign_id;
-    $ids         = [ $campaign_id ];
-    if ( cm_campaign_allows_volunteers( $campaign_id ) ) {
-        $children = get_posts(
-            [
-                'post_type'   => 'campaign',
-                'post_parent' => $campaign_id,
-                'post_status' => [ 'publish', 'draft' ],
-                'numberposts' => -1,
-                'fields'      => 'ids',
-            ]
-        );
-        $ids = array_merge( $ids, array_map( 'intval', $children ) );
+    global $wp_query;
+    if ( ! isset( $GLOBALS['cm_list_totals'] ) ) {
+        $ids = is_admin() && isset( $wp_query->posts ) ? wp_list_pluck( $wp_query->posts, 'ID' ) : [];
+        $ids[] = (int) $campaign_id;
+        $GLOBALS['cm_list_totals'] = cm_campaign_list_totals( array_unique( $ids ) );
     }
-    $ids = array_filter( array_unique( $ids ) );
-    if ( empty( $ids ) ) {
-        return 0.0;
+    $totals = &$GLOBALS['cm_list_totals'];
+    if ( ! isset( $totals[ (int) $campaign_id ] ) ) {
+        $totals += cm_campaign_list_totals( [ (int) $campaign_id ] );
     }
-    if ( ! function_exists( 'wc_get_orders' ) ) {
-        return 0.0;
-    }
-    $orders = wc_get_orders(
-        [
-            'limit'  => -1,
-            'status' => [ 'completed', 'processing', 'on-hold' ],
-            'type'   => 'shop_order',
-        ]
-    );
-    $total = 0.0;
-    foreach ( $orders as $order ) {
-        foreach ( $order->get_items() as $item ) {
-            $item_campaign_id = (int) $item->get_meta( '_campaign_id' );
-            if ( in_array( $item_campaign_id, $ids, true ) ) {
-                $total += (float) $item->get_total();
-            }
-        }
-    }
-    return $total;
+    return $totals[ (int) $campaign_id ];
 }
-
-/**
- * Invalidate campaign stats cache for all campaign IDs attached to an order
- */
-function cm_invalidate_campaign_stats_for_order( $order_id ) {
-    $order = wc_get_order( $order_id );
-    if ( ! $order ) {
-        return;
-    }
-    $seen = [];
-    foreach ( $order->get_items() as $item ) {
-        $campaign_id = (int) $item->get_meta( '_campaign_id' );
-        if ( $campaign_id && empty( $seen[ $campaign_id ] ) ) {
-            delete_transient( 'cm_campaign_stats_' . $campaign_id );
-            $seen[ $campaign_id ] = true;
-        }
-    }
-}
-
-// Invalidate on status changes and when line items are created
-add_action( 'woocommerce_order_status_changed', 'cm_invalidate_campaign_stats_for_order', 10, 1 );
-add_action(
-    'woocommerce_checkout_create_order_line_item',
-    function ( $item, $cart_item_key, $values, $order ) {
-        if ( $order instanceof WC_Order ) {
-            cm_invalidate_campaign_stats_for_order( $order->get_id() );
-        }
-    },
-    20,
-    4
-);
-
-
 
 /**
  * Display campaign goal and recent donations
@@ -730,6 +623,18 @@ function cm_display_campaign_goal( $post_id ) {
 
     $stats        = cm_get_campaign_stats( $post_id );
     $total_raised = (float) ( $stats['total_raised'] ?? 0 );
+
+    if ( $total_raised >= $donation_goal && '1' === get_post_meta( $post_id, '_hide_goal_after_reached', true ) ) {
+        return '<div class="campaign-progress">
+            <div class="progress-stats">
+                <div class="progress-amount">
+                    <span class="total-raised">' . wc_price( $total_raised ) . '</span>
+                    <span class="goal-amount">' . esc_html__( 'raised', 'wp-charity' ) . '</span>
+                </div>
+            </div>
+        </div>';
+    }
+
     $progress     = $donation_goal > 0 ? min( 100, ( $total_raised / $donation_goal ) * 100 ) : 0;
 
     $content = '<div class="campaign-progress">
@@ -740,12 +645,12 @@ function cm_display_campaign_goal( $post_id ) {
             </div>
             <div class="progress-percentage">' . round( $progress ) . '%</div>
         </div>
-        <div class="progress-bar-container">
+        <div class="progress-bar-container" role="progressbar" aria-label="' . esc_attr__( 'Campaign fundraising progress', 'wp-charity' ) . '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' . esc_attr( (string) round( $progress ) ) . '">
             <div class="progress-bar" style="width: ' . esc_attr( $progress ) . '%;"></div>
         </div>';
 
     if ( $total_raised >= $donation_goal ) {
-        $content .= '<div class="goal-reached">🎉 Goal has been reached! Thank you to all our donors! 🎉</div>';
+        $content .= '<div class="goal-reached">' . esc_html__( 'Goal reached. Thank you to all our donors!', 'wp-charity' ) . '</div>';
     }
 
     $content .= '</div>';
@@ -773,7 +678,7 @@ function cm_display_campaign_author( $post ) {
     $content = '<div class="campaign-creator">
         <div class="creator-profile">
             <div class="creator-avatar">
-                <img src="' . esc_url( $avatar_url ) . '" alt="' . esc_attr( $first_name . ' ' . $last_name ) . '" style="max-width: 128px; height: auto; border-radius: 50%;">
+                <img src="' . esc_url( $avatar_url ) . '" alt="' . esc_attr( $first_name . ' ' . $last_name ) . '" width="96" height="96" loading="lazy">
             </div>
             <div class="creator-info">
                 <h3>' . esc_html( $first_name . ' ' . $last_name ) . '</h3>' .
@@ -801,8 +706,17 @@ function cm_display_campaign_orders() {
     $campaign_id = $post->ID;
 
     try {
-        $stats  = cm_get_campaign_stats( $campaign_id );
-        $orders = $stats['orders'] ?? [];
+        $page = cm_donation_page( [ $campaign_id ], 1, 10, true );
+        $orders = [];
+        foreach ( $page['rows'] as $row ) {
+            $order = wc_get_order( $row['order_id'] );
+            if ( $order ) {
+                $orders[] = [
+                    'timestamp' => $order->get_date_created() ? $order->get_date_created()->getTimestamp() : 0,
+                    'total'     => (float) $order->get_total(),
+                ];
+            }
+        }
         $limit  = 10; // show last 10 donations
         if ( ! empty( $orders ) ) {
             $out .= '<details class="donations-list-container">
@@ -814,15 +728,13 @@ function cm_display_campaign_orders() {
                 if ( $count++ >= $limit ) {
                     break;
                 }
-                $order_date   = $o['timestamp'] ? date_i18n( 'F j, Y g:i a', $o['timestamp'] ) : '';
-                $order_total  = $o['total'];
-                $order_status = wc_get_order_status_name( $o['status'] );
-                $out         .= '<li class="donation-item">
+                $order_date  = $o['timestamp'] ? date_i18n( 'F j, Y g:i a', $o['timestamp'] ) : '';
+                $order_total = $o['total'];
+                $out        .= '<li class="donation-item">
                         <div class="donation-details">
                             <span class="donation-amount">' . wc_price( $order_total ) . '</span>
-                            <span class="donation-date">Donated on ' . esc_html( $order_date ) . '</span>
+                            <span class="donation-date">' . esc_html__( 'Donated on', 'wp-charity' ) . ' ' . esc_html( $order_date ) . '</span>
                         </div>
-                        <span class="donation-status status-' . esc_attr( strtolower( $order_status ) ) . '">' . esc_html( $order_status ) . '</span>
                     </li>';
             }
 
@@ -918,10 +830,8 @@ function cm_maybe_reassign_donation_campaign() {
     $order_id    = (int) $_POST['cm_reassign_order_id'];
     $item_id     = (int) $_POST['cm_reassign_item_id'];
     $campaign_id = (int) $_POST['cm_reassign_campaign_id'];
-    $edit_url = get_edit_post_link( $order_id, 'raw' );
-    if ( ! $edit_url && function_exists( 'admin_url' ) ) {
-        $edit_url = admin_url( 'admin.php?page=wc-orders&action=edit&id=' . $order_id );
-    }
+    $order = wc_get_order( $order_id );
+    $edit_url = $order ? $order->get_edit_order_url() : admin_url();
     if ( ! $order_id || ! $item_id || ! $campaign_id ) {
         wp_safe_redirect( add_query_arg( 'cm_reassign', 'error', $edit_url ) );
         exit;
@@ -944,10 +854,7 @@ function cm_maybe_reassign_donation_campaign() {
     }
     $item->update_meta_data( '_campaign_id', $campaign_id );
     $item->save();
-    if ( $old_campaign_id > 0 ) {
-        delete_transient( 'cm_campaign_stats_' . $old_campaign_id );
-    }
-    delete_transient( 'cm_campaign_stats_' . $campaign_id );
+    cm_clear_campaign_summaries( [ $old_campaign_id, $campaign_id ] );
     wp_safe_redirect( add_query_arg( 'cm_reassign', 'success', $edit_url ) );
     exit;
 }
@@ -1032,22 +939,29 @@ function cm_reassign_donation_meta_box( $post_or_order ) {
         } else {
             echo '<p style="margin: 0 0 6px 0;"><small>' . esc_html__( 'Not assigned to a campaign.', 'wp-charity' ) . '</small></p>';
         }
-        echo '<form method="post" style="margin: 0;">';
-        wp_nonce_field( 'cm_reassign_donation_campaign', 'cm_reassign_donation_nonce' );
-        echo '<input type="hidden" name="cm_reassign_order_id" value="' . esc_attr( (string) $order->get_id() ) . '">';
-        echo '<input type="hidden" name="cm_reassign_item_id" value="' . esc_attr( (string) $item_id ) . '">';
-        echo '<select name="cm_reassign_campaign_id" style="width: 100%; margin-bottom: 6px;" required>';
+        // Associate controls with a separate footer form, outside WooCommerce's order form.
+        $form_id = 'cm-assign-' . (int) $item_id;
+        $GLOBALS['cm_assignment_forms'][ $item_id ] = $order;
+        echo '<select form="' . esc_attr( $form_id ) . '" name="cm_reassign_campaign_id" style="width: 100%; margin-bottom: 6px;" required>';
         echo '<option value="">' . esc_html__( '— Select campaign —', 'wp-charity' ) . '</option>';
         foreach ( $campaigns as $c ) {
             $selected = (int) $c->ID === (int) $data['campaign_id'] ? ' selected' : '';
             echo '<option value="' . esc_attr( (string) $c->ID ) . '"' . $selected . '>' . esc_html( $c->post_title ) . ' (' . (int) $c->ID . ')</option>';
         }
         echo '</select>';
-        echo '<button type="submit" class="button button-primary" style="width: 100%;">' . ( $has_campaign ? esc_html__( 'Reassign to selected campaign', 'wp-charity' ) : esc_html__( 'Assign to selected campaign', 'wp-charity' ) ) . '</button>';
-        echo '</form>';
+        echo '<button form="' . esc_attr( $form_id ) . '" type="submit" class="button button-primary" style="width: 100%;">' . ( $has_campaign ? esc_html__( 'Reassign to selected campaign', 'wp-charity' ) : esc_html__( 'Assign to selected campaign', 'wp-charity' ) ) . '</button>';
         echo '</div>';
     }
 }
+
+add_action( 'admin_footer', function () {
+    foreach ( $GLOBALS['cm_assignment_forms'] ?? [] as $item_id => $order ) {
+        echo '<form id="cm-assign-' . (int) $item_id . '" method="post" action="' . esc_url( $order->get_edit_order_url() ) . '">';
+        wp_nonce_field( 'cm_reassign_donation_campaign', 'cm_reassign_donation_nonce' );
+        echo '<input type="hidden" name="cm_reassign_order_id" value="' . (int) $order->get_id() . '">';
+        echo '<input type="hidden" name="cm_reassign_item_id" value="' . (int) $item_id . '"></form>';
+    }
+} );
 
 /**
  * Generate QR code for a given URL using QR Server API
@@ -1060,8 +974,8 @@ function cm_generate_qr_code( $url ) {
     $encoded_url = urlencode( $url );
     $qr_code_url = "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" . $encoded_url;
     
-    return '<div class="campaign-qr-code" style="text-align: center; margin: 20px 0;">
-        <img src="' . esc_url( $qr_code_url ) . '" alt="QR Code for this page" style="max-width: 200px; height: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; background: white;">
-        <p style="margin-top: 10px; font-size: 14px; color: #666;">Scan to share this campaign</p>
+    return '<div class="campaign-qr-code">
+        <img src="' . esc_url( $qr_code_url ) . '" alt="' . esc_attr__( 'QR code for this campaign', 'wp-charity' ) . '" width="200" height="200" loading="lazy">
+        <p>' . esc_html__( 'Scan to share this campaign', 'wp-charity' ) . '</p>
     </div>';
 }

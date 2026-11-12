@@ -1,10 +1,10 @@
 === WP Charity for WooCommerce ===
 Contributors: butterflymedia
 Tags: charity, donations, fundraising, woocommerce, campaigns, nonprofit
-Requires at least: 6.0
-Tested up to: 7.0
+Requires at least: 7.1
+Tested up to: 7.1.3
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.6
 Requires Plugins: woocommerce
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -54,6 +54,36 @@ Orders store a campaign ID on the relevant line item. The admin donations report
 3. WooCommerce order screen: assign or reassign a line item to a campaign.
 
 == Changelog ==
+
+= 1.2.6 =
+* **Campaign goals:** Optional "Hide goal progress once the target is reached" setting in the admin and volunteer campaign editors hides the target, percentage, progress bar and success message once funded, keeping the amount raised and donation controls visible. Existing campaigns retain their current display by default.
+
+= 1.2.5 =
+* **Campaign videos:** Campaign stories now preserve WordPress block, oEmbed and shortcode rendering so YouTube blocks display correctly, with responsive video sizing.
+* **Compatibility:** WordPress 7.1 is now the minimum supported version. Tested up to WooCommerce 11.2.1.
+
+= 1.2.4 =
+* **Recent donations:** Donation rows now show only the donated amount and date, without WooCommerce processing or completion statuses.
+
+= 1.2.3 =
+* **Campaign list:** A dedicated Campaign type column uses compact coloured badges for parent campaigns, volunteer campaigns and campaigns that allow volunteer fundraising.
+
+= 1.2.2 =
+* **Campaign pages:** Modern responsive presentation for parent and volunteer campaigns, with improved media, story, donation, progress, date, sharing and recent-donation sections.
+* **Admin campaigns list:** Coloured badges identify parent campaigns and campaigns that allow volunteer fundraising.
+* **Accessibility:** Improved keyboard focus, reduced-motion handling and fundraising progress semantics.
+
+= 1.2.1 =
+* **Author donation emails:** Automatically notify the authors of campaigns attached to an order when it enters Processing, Completed or On hold. One separate message per author/order contains only their campaign amounts. On-hold messages explain that payment awaits confirmation.
+* **Delivery:** Messages run through WooCommerce's background scheduler and mailer. Successful recipients are recorded using HPOS-compatible order metadata; failed recipients get up to three attempts. Order actions can retry failures without resending successful messages. Existing orders are not bulk-emailed on upgrade.
+
+= 1.2.0 =
+* **Performance:** Campaign totals use batched, cached database aggregates against the active WooCommerce order store. Existing amounts, statuses and refund treatment are preserved.
+* **Reports:** Help retains its campaign report, with 20 campaigns per page and orders loaded on request. Reports and account donations are paginated; full CSV exports stream in batches.
+* **Account:** Donations load only when opened. Registration safely sends passwords and phone numbers, profile updates change the actual account email, and campaign editing checks ownership and permissions. Modern vanilla JavaScript handles forms and accessible tabs.
+* **How To:** New settings tab with practical questions and answers grounded in the plugin's features.
+* **Fixes:** Automatic campaign approval honours its setting; donation reassignment uses valid, separate forms in the WooCommerce order editor.
+* **Compatibility:** Updated compatibility metadata for WordPress 7.1.3 and WooCommerce 11.2.0. This release has isolated regression and syntax checks; live integration and performance timing were not performed. See tests/README.md.
 
 = 1.1.0 =
 * **Emails:** Author receives an email when a moderated (draft) campaign is submitted, and when it is approved and published (with a link to the live campaign).

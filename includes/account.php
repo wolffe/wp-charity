@@ -67,7 +67,8 @@ add_filter( 'manage_users_custom_column', 'fxm_user_table_row', 10, 3 );
 
 
 function fxm_signup_form( $atts, $content = false ) {
-    $out = '<form action="#" method="post" name="register-form" class="fxm-form" autocomplete="off">
+    $out = '<form action="#" method="post" data-cm-ajax="fxm_register_user_front_end" class="fxm-form">
+        <input type="hidden" name="nonce" value="' . esc_attr( wp_create_nonce( 'cm_register' ) ) . '">
         <p class="register-message" style="display:none"></p>
         <p style="display:none">
             <label class="block" for="new-username">' . __( 'Username', 'wp-charity' ) . '</label>
@@ -77,7 +78,7 @@ function fxm_signup_form( $atts, $content = false ) {
             <div class="wp-block-column">
                 <p>
                     <label class="block" for="new-useremail">' . __( 'Email Address', 'wp-charity' ) . ' <span>*</span></label>
-                    <input type="email" name="new_user_email" id="new-useremail" autocomplete="on">
+                    <input type="email" name="new_user_email" id="new-useremail" required autocomplete="on">
                 </p>
             </div>
             <div class="wp-block-column">
@@ -91,13 +92,13 @@ function fxm_signup_form( $atts, $content = false ) {
             <div class="wp-block-column">
                 <p>
                     <label class="block" for="new-firstname">' . __( 'First Name', 'wp-charity' ) . ' <span>*</span></label>
-                    <input type="text" name="new_firstname" id="new-firstname" autocomplete="on">
+                    <input type="text" name="new_firstname" id="new-firstname" required autocomplete="on">
                 </p>
             </div>
             <div class="wp-block-column">
                 <p>
                     <label class="block" for="new-lastname">' . __( 'Last Name', 'wp-charity' ) . ' <span>*</span></label>
-                    <input type="text" name="new_lastname" id="new-lastname" autocomplete="on">
+                    <input type="text" name="new_lastname" id="new-lastname" required autocomplete="on">
                 </p>
             </div>
         </div>
@@ -105,13 +106,13 @@ function fxm_signup_form( $atts, $content = false ) {
             <div class="wp-block-column">
                 <p>
                     <label class="block" for="new-userpassword">' . __( 'Password', 'wp-charity' ) . ' <span>*</span></label>
-                    <input type="password" name="new_user_password" id="new-userpassword" autocomplete="new-password">
+                    <input type="password" name="new_user_password" id="new-userpassword" required autocomplete="new-password">
                 </p>
             </div>
             <div class="wp-block-column">
                 <p>
                     <label class="block" for="re-pwd">' . __( 'Confirm Password', 'wp-charity' ) . ' <span>*</span></label>
-                    <input type="password" name="re-pwd" id="re-pwd" autocomplete="new-password">
+                    <input type="password" name="re-pwd" id="re-pwd" required autocomplete="new-password">
                 </p>
             </div>
         </div>';
@@ -122,7 +123,7 @@ function fxm_signup_form( $atts, $content = false ) {
         $page_title         = ( $policy_page_id ) ? get_the_title( $policy_page_id ) : '';
 
         $out .= '<p>
-            <input type="checkbox" name="fxm_tc_agree" id="fxm_tc_agree" value="1">
+            <input type="checkbox" required name="fxm_tc_agree" id="fxm_tc_agree" value="1">
             <label for="fxm_tc_agree">';
         /* translators: 1: Privacy policy URL, 2: Privacy policy page title */
         $out .= sprintf( __( 'I agree to the <a href="%1$s" target="_blank">%2$s</a>', 'wp-charity' ), esc_url( $privacy_policy_url ), esc_html( $page_title ) );
@@ -260,63 +261,8 @@ function cm_send_approval_webhook_ghl( $new_status, $old_status, $post ) {
 add_action( 'transition_post_status', 'cm_send_approval_webhook_ghl', 10, 3 );
 
 function fxm_register_user_front_end() {
-    $new_user_email    = stripcslashes( $_POST['new_user_email'] );
-    $new_user_phone    = isset( $_POST['new_user_phone'] ) ? sanitize_text_field( $_POST['new_user_phone'] ) : '';
-    $new_user_password = $_POST['new_user_password'];
-    $user_nice_name    = strtolower( $_POST['new_user_email'] );
-    $loginurl          = get_permalink( (int) get_option( 'fxm_members_account_page_id' ) );
+    cm_handle_registration();
 
-    // Derive display name from provided first/last names if available
-    $new_firstname = isset( $_POST['new_firstname'] ) ? sanitize_text_field( $_POST['new_firstname'] ) : '';
-    $new_lastname  = isset( $_POST['new_lastname'] ) ? sanitize_text_field( $_POST['new_lastname'] ) : '';
-    $display_name  = trim( $new_firstname . ' ' . $new_lastname );
-    if ( '' === $display_name ) {
-        $display_name = $new_user_email;
-    }
-
-    $user_data = [
-        'user_login'    => $new_user_email,
-        'user_email'    => $new_user_email,
-        'user_pass'     => $new_user_password,
-        'user_nicename' => $user_nice_name,
-        'display_name'  => $display_name,
-        'role'          => 'volunteer',
-    ];
-
-    $user_id = wp_insert_user( $user_data );
-
-    if ( ! is_wp_error( $user_id ) ) {
-        if ( isset( $_POST['new_firstname'] ) ) {
-            update_user_meta( $user_id, 'first_name', sanitize_text_field( $_POST['new_firstname'] ) );
-        }
-
-        if ( isset( $_POST['new_lastname'] ) ) {
-            update_user_meta( $user_id, 'last_name', sanitize_text_field( $_POST['new_lastname'] ) );
-        }
-        if ( ! empty( $new_user_phone ) ) {
-            update_user_meta( $user_id, 'billing_phone', $new_user_phone );
-        }
-
-        // Trigger new user email notification (to user)
-        wp_send_new_user_notifications( $user_id, 'user' );
-
-        echo '<p>' . __( 'Registration successful!', 'wp-charity' ) . '</p>';
-        echo '<p><a href="' . $loginurl . '">' . __( 'Log in', 'wp-charity' ) . '</a></p>';
-    } else {
-        if ( isset( $user_id->errors['empty_user_login'] ) ) {
-            $notice_key = __( 'Username and email are mandatory', 'wp-charity' );
-
-            echo $notice_key;
-        } elseif ( isset( $user_id->errors['existing_user_email'] ) ) {
-            echo __( 'Sorry, that email address is already used!', 'wp-charity' );
-        } elseif ( isset( $user_id->errors['existing_user_login'] ) ) {
-            echo __( 'Username already exists.', 'wp-charity' );
-        } else {
-            echo __( 'Error: please fill up the sign up form carefully.', 'wp-charity' );
-        }
-    }
-
-    wp_die();
 }
 
 
@@ -331,35 +277,8 @@ function fxm_register_user_front_end() {
 add_action( 'init', 'fxm_login_action' );
 
 function fxm_login_action() {
-    global $tiny_error;
+    cm_handle_login();
 
-    $tiny_error = false;
-
-    if ( isset( $_POST['tiny_email'] ) && isset( $_POST['password'] ) ) {
-        $creds = [];
-
-        // Get username from email address
-        $user_object = get_user_by( 'email', sanitize_email( $_POST['tiny_email'] ) );
-
-        if ( ! empty( $user_object->user_login ) ) {
-            $username = $user_object->user_login;
-        }
-
-        $creds['user_login']    = $username;
-        $creds['user_password'] = sanitize_text_field( $_POST['password'] );
-
-        $user = wp_signon( $creds );
-
-        if ( is_wp_error( $user ) ) {
-            $tiny_error = $user->get_error_message();
-        } else {
-            if ( isset( $_POST['redirect'] ) && $_POST['redirect'] ) {
-                wp_redirect( $_POST['redirect'] );
-
-                exit;
-            }
-        }
-    }
 }
 
 function fxm_error() {
@@ -380,12 +299,14 @@ function fxm_login_form() {
     $redirect = (int) get_option( 'fxm_members_account_page_id' ) > 0 ? get_permalink( (int) get_option( 'fxm_members_account_page_id' ) ) : home_url();
 
     if ( ! is_user_logged_in() ) {
-        $return = '<form action="#" method="post" name="register-form" class="fxm-form" autocomplete="off">';
+        $return = '<form action="#" method="post" class="fxm-form">
+            <input type="hidden" name="cm_action" value="cm_login">
+            <input type="hidden" name="nonce" value="' . esc_attr( wp_create_nonce( 'cm_login' ) ) . '">';
 
         $error = fxm_error();
 
         if ( $error ) {
-            $return .= '<p class="error">' . $error . '</p>';
+            $return .= '<p class="error">' . esc_html( $error ) . '</p>';
         }
 
         if ( isset( $_GET['rp'] ) && sanitize_text_field( $_GET['rp'] ) === 's' ) {
@@ -394,12 +315,12 @@ function fxm_login_form() {
 
         $return .= '<p>
             <label class="block" for="tiny_email">' . __( 'Email Address', 'wp-charity' ) . '</label>
-            <input type="text" id="tiny_email" name="tiny_email" value="' . ( isset( $_POST['tiny_email'] ) ? $_POST['tiny_email'] : '' ) . '" autocomplete="username">
+            <input type="email" required id="tiny_email" name="tiny_email" value="' . esc_attr( cm_post_text( 'tiny_email' ) ) . '" autocomplete="username">
         </p>';
 
         $return .= '<p>
             <label class="block" for="tiny_password">' . __( 'Password', 'wp-charity' ) . '</label>
-            <input type="password" id="tiny_password" name="password" autocomplete="current-password">
+            <input type="password" required id="tiny_password" name="password" autocomplete="current-password">
         </p>';
 
         $return .= '<input type="hidden" name="redirect" value="' . $redirect . '">';
@@ -418,7 +339,8 @@ add_shortcode( 'fxm-login', 'fxm_login_form' );
 
 
 function fxm_forgot_password_form( $redirect ) {
-    $out = '<form id="lostpasswordform" action="" method="post" class="fxm-form fxm-reset-password-form">
+    $out = '<form id="lostpasswordform" action="" method="post" class="fxm-form fxm-reset-password-form" data-cm-ajax="reset">
+        <input type="hidden" name="nonce" value="' . esc_attr( wp_create_nonce( 'cm_reset' ) ) . '">
         <input type="hidden" name="action" value="reset">
 
         <p class="register-message" style="display:none"></p>
@@ -427,7 +349,7 @@ function fxm_forgot_password_form( $redirect ) {
 
         <p>
             <label class="block" for="user_login">' . __( 'Email', 'wp-charity' ) . '</label>
-            <input type="text" name="user_login" id="user_login">
+            <input type="text" required name="user_login" id="user_login">
         </p>
         <p class="submit">
             <input type="submit" name="submit" id="submit" value="' . __( 'Get New Password', 'wp-charity' ) . '">
@@ -438,94 +360,35 @@ function fxm_forgot_password_form( $redirect ) {
 }
 
 function wppd_tiny_ajax_password_reset() {
-    $email_address = $_POST['user_login'];
-    $user_data     = get_user_by( 'email', trim( wp_unslash( $email_address ) ) );
+    cm_handle_password_reset();
 
-    if ( empty( $user_data ) ) {
-        echo json_encode( [ 'status' => 'error' ] );
-        exit;
-    }
-
-    $user_login = $user_data->user_login;
-    $user_email = $user_data->user_email;
-
-    do_action( 'retrieve_password', $user_login );
-
-    $allow = apply_filters( 'allow_password_reset', true, $user_data->ID );
-
-    if ( ! $allow ) {
-        echo json_encode( [ 'status' => 'error' ] );
-        exit;
-    } elseif ( is_wp_error( $allow ) ) {
-        echo json_encode( [ 'status' => 'error' ] );
-        exit;
-    }
-    $key = get_password_reset_key( $user_data );
-
-    if ( is_wp_error( $key ) ) {
-        echo json_encode( [ 'status' => 'error' ] );
-        exit;
-    }
-
-    $message  = '<p>' . __( 'Someone has requested a password reset for the following account:', 'wp-charity' ) . '</p>';
-    $message .= '<p>' . network_home_url( '/' ) . '</p>';
-    // translators: %s: Username of the account requesting a password reset
-    $message .= '<p>' . sprintf( __( 'Username: %s', 'wp-charity' ), $user_login ) . '</p>';
-    $message .= '<p>' . __( 'If this was a mistake, just ignore this email and nothing will happen.', 'wp-charity' ) . '</p>';
-    $message .= '<p>' . __( 'To reset your password, visit the following address:', 'wp-charity' ) . '</p>';
-    $message .= '<p>
-        <a href="' . network_site_url( "wp-login.php?action=rp&key=$key&login=" . rawurlencode( $user_login ), 'login' ) . '">' . __( 'Reset Password', 'wp-charity' ) . '</a>
-    </p>';
-
-    if ( is_multisite() ) {
-        $blogname = $GLOBALS['current_site']->site_name;
-    } else {
-        $blogname = wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
-    }
-
-    // translators: %s: Site name used in the email subject
-    $title = sprintf( __( '[%s] Password Reset', 'wp-charity' ), $blogname );
-
-    $headers   = [];
-    $headers[] = 'Content-Type: text/html;';
-    $headers[] = 'X-Mailer: WordPress/PropertyDrive;';
-    $headers[] = "Reply-To: $name <$email>;";
-
-    if ( $message && ! wp_mail( $user_email, wp_specialchars_decode( $title ), $message, $headers ) ) {
-        echo json_encode( [ 'status' => 'error' ] );
-    } else {
-        echo json_encode( [ 'status' => 'success' ] );
-    }
-
-    exit;
 }
 add_action( 'wp_ajax_nopriv_reset', 'wppd_tiny_ajax_password_reset' );
+add_action( 'wp_ajax_reset', 'wppd_tiny_ajax_password_reset' );
 
 
 
 /**
- * Add custom redirect after password reset for non-admin users
+ * Offer the account login after WordPress finishes resetting a volunteer password.
  *
  * @param mixed $user
  * @return void
  */
-function wppd_tiny_redirect_after_password_reset() {
-    $confirm  = ( isset( $_GET['action'] ) && sanitize_text_field( $_GET['action'] ) === 'resetpass' );
-    $redirect = (int) get_option( 'fxm_members_account_page_id' ) > 0 ? get_permalink( (int) get_option( 'fxm_members_account_page_id' ) ) : home_url();
-
-    $redirect_with_params = add_query_arg( 'rp', 's', $redirect ) . '#login';
-
-    if ( $confirm ) {
-        wp_redirect( $redirect_with_params );
-        exit;
-    }
+function cm_account_password_reset_complete( $user ) {
+    $GLOBALS['cm_account_password_reset_complete'] = in_array( 'volunteer', (array) $user->roles, true );
 }
-add_action( 'login_headerurl', 'wppd_tiny_redirect_after_password_reset' );
+add_action( 'after_password_reset', 'cm_account_password_reset_complete' );
+add_filter( 'login_message', function ( $message ) {
+    if ( ! empty( $GLOBALS['cm_account_password_reset_complete'] ) ) {
+        $message .= '<p class="message"><a href="' . esc_url( add_query_arg( 'rp', 's', cm_account_url() ) . '#login' ) . '">' . esc_html__( 'Log in to your volunteer account', 'wp-charity' ) . '</a></p>';
+    }
+    return $message;
+} );
 
 
 
 function fxm_account() {
-    $out = '';
+    $out = '<div class="cm-account">';
 
     $redirect = (int) get_option( 'fxm_members_account_page_id' ) > 0 ? get_permalink( (int) get_option( 'fxm_members_account_page_id' ) ) : home_url();
 
@@ -554,7 +417,7 @@ function fxm_account() {
         }
     }
 
-    return $out;
+    return $out . '</div>';
 }
 
 add_shortcode( 'fxm-account', 'fxm_account' );

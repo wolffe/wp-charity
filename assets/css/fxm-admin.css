@@ -9,3 +9,62 @@
         grid-template-columns: 1fr;
     }
 }
+/* Help reports and the code-backed setup guide. */
+.cm-how-to { max-width: 900px; }
+.cm-how-to details { background: #fff; border: 1px solid #dcdcde; padding: 16px; margin: 12px 0; }
+.cm-how-to summary { cursor: pointer; font-weight: 600; }
+.cm-how-to p { margin-bottom: 0; line-height: 1.7; }
+.cm-pagination, .cm-remote-list nav { display: flex; gap: 8px; align-items: center; margin: 16px 0; }
+.cm-remote-list[hidden] { display: none; }
+
+/* Campaign type indicators in the WordPress list table. */
+body.post-type-campaign .column-campaign_type {
+    width: 220px;
+}
+
+body.post-type-campaign .cm-campaign-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+body.post-type-campaign .column-campaign_type .cm-campaign-badge {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: 20px;
+    margin: 0;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 18px;
+    letter-spacing: 0.01em;
+    vertical-align: middle;
+}
+
+body.post-type-campaign .column-campaign_type .cm-campaign-badge--parent {
+    border-color: #72aee6;
+    background: #e7f2fc;
+    color: #0a4b78;
+}
+
+body.post-type-campaign .column-campaign_type .cm-campaign-badge--volunteer {
+    border-color: #c4b5fd;
+    background: #f3e8ff;
+    color: #4c1d95;
+}
+
+body.post-type-campaign .column-campaign_type .cm-campaign-badge--volunteers {
+    border-color: #68de7c;
+    background: #edfaef;
+    color: #005c12;
+}
+
+@media (forced-colors: active) {
+    body.post-type-campaign .column-campaign_type .cm-campaign-badge {
+        border-color: ButtonText;
+    }
+}
